@@ -7,6 +7,7 @@ import '../model/editor_scene_state.dart';
 import '../view/editor_view.dart';
 import '../view/ray_entity_picker.dart';
 import 'asset_kind.dart';
+import 'level_aids.dart';
 import 'editor_marker.dart';
 import 'prefab_variant.dart';
 import 'viewport_handles.dart';
@@ -14,6 +15,7 @@ import 'viewport_overlay.dart';
 import '../designer/designer_overlay.dart';
 import '../model/editor_history.dart';
 import '../designer/layer_preset.dart';
+import '../designer/prefab_pictures.dart';
 import '../designer/prefab_registry.dart';
 import '../inspector/component_extras.dart';
 import '../inspector/field_editor.dart';
@@ -176,6 +178,25 @@ abstract class EditorModule {
       statusControls.isNotEmpty ||
       designerPanels.isNotEmpty;
 
+  /// The scene modes this module is a level designer for: the switch lists
+  /// it only while a scene of one of them is open, as the platformer kit is
+  /// listed for 2-D levels and a 3-D kit for 3-D ones.
+  ///
+  /// Worked out from what it places and draws — a kit whose prefabs and
+  /// overlays are all 3-D designs 3-D scenes — and 2-D when they say
+  /// nothing (a designer of tools alone). Empty when it is no designer
+  /// ([providesLevelDesigner]).
+  Set<jge.SceneMode> get designerModes {
+    if (!providesLevelDesigner) return const {};
+    final modes = <jge.SceneMode>{
+      for (final mode in jge.SceneMode.values)
+        if (prefabs.any((p) => p.dimensions.allows(mode)) ||
+            overlays.any((o) => o.dimensions.allows(mode)))
+          mode,
+    };
+    return modes.isEmpty ? const {jge.SceneMode.twoD} : modes;
+  }
+
   /// Add-Component picker groups this module's definitions use, in the order
   /// they should appear after the built-in groups.
   List<String> get componentGroups => const [];
@@ -253,6 +274,16 @@ abstract class EditorModule {
   /// what is drawn rather than its box (a model's triangles).
   List<EntityRayTest> get pickTests => const [];
 
+  /// What this game kit knows about how its levels are played — its
+  /// player's jump and slopes, its kill height, starting play from a
+  /// point — for the Level Designer's aids. Asked of every module.
+  LevelAids? get levelAids => null;
+
+  /// Pictures for prefabs in the palette (see [PrefabPicture]): asked in
+  /// turn, the first that draws one wins; a prefab without one shows its
+  /// icon.
+  List<PrefabPicture> get prefabPictures => const [];
+
   /// Kinds of file it knows: how the asset browser shows them and what
   /// dropping one on the viewport makes (see [AssetKind]).
   List<AssetKind> get assetKinds => const [];
@@ -301,6 +332,12 @@ abstract class EditorModule {
 
   /// Called when a scene finishes loading.
   void onSceneOpened(String sceneName) {}
+
+  /// Called as scene [sceneName] is saved, before its file is written: for
+  /// files of this module's own that the scene refers to — a terrain's
+  /// heights — to be written with it. A throw is reported, and the scene
+  /// is saved all the same.
+  Future<void> onSceneSaving(String sceneName) async {}
 
   /// Called every editor tick.
   void onUpdate(double dt) {}
@@ -389,6 +426,20 @@ class ModuleRegistry {
     for (final m in _modules.values) {
       m.onSceneOpened(sceneName);
     }
+  }
+
+  /// Forwards a scene save to every module, in turn; what each threw, by
+  /// module id.
+  Future<Map<String, Object>> notifySceneSaving(String sceneName) async {
+    final failed = <String, Object>{};
+    for (final MapEntry(key: id, value: m) in _modules.entries) {
+      try {
+        await m.onSceneSaving(sceneName);
+      } on Object catch (error) {
+        failed[id] = error;
+      }
+    }
+    return failed;
   }
 
   /// Forwards an editor tick.

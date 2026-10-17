@@ -1,9 +1,18 @@
 # Changelog
 
-## 0.1.0
+## 0.1.0-dev.1
 
 First release: the part of `just_game_engine_editor` a module builds on, in a package of its own, so a kit or an editor plugin no longer depends on the whole editor.
 
+- **Designers per scene mode**: `EditorModule.designerModes` and `EditorScope.designersFor`; the tool registry keeps a tool per mode.
+- **Tools in 3-D**: `ToolContext.space` (`SpaceContext`: the pointer's ray, the working plane, the surface under it, snapping), `WorkingPlane`, `Designer3DState` (working plane, snapping, pivot, view mode, outline, slice, placement, arrays, the material in hand), `Placement3D`, `Array3DSpec`, `LevelToolHandler.onScroll`.
+- **Picking surfaces**: `RayTriangles`, `EntitySurfaceTest`, `EntityVertexSource`, `RayEntityPicker.placementAlong` and `localBoundsOf`.
+- **Editing**: `ComponentEdit` is public, with `beginAll` and `include`; `ViewportHandle.alsoEdits`.
+- **Level aids**: `LevelAids` and `MovementProfile` (`EditorModule.levelAids`; `EditorScope.movement`, `killHeight`).
+- **Prefabs**: `SceneCodec(prefabs:)` folds instances back into their files' terms as a scene is saved (`encodeForSave`, `markPrefabs`, `collapseMarked`); `EditorModule.prefabPictures`, `PrefabFavourites`; `AssetDrop.surface`.
+- Hide and lock are hierarchical (`EditorViewState.isHiddenIn`, `isLockedIn`); `EditorScope.viewOverride` for split views.
+- `EditorModule.onSceneSaving`: a module writes the files a scene refers to as it is saved (`ModuleRegistry.notifySceneSaving`).
+- `SidePanelSection.groups`: a module's side-panel section opens with its own tools, and is shut for the rest until opened.
 - **The module contract**: `EditorModule` and every contribution type, `EditorModuleContext`, `DesignerToolContext`, `ModuleRegistry` — with built-in modules (`builtIns`, `withBuiltIns`): what the host brings itself, registered ahead of the rest.
 - **The scope**: `EditorScope` and its services. It holds no built-ins of its own: the host passes them as modules (`EditorScope(builtIns: …)`, `addBuiltIn`). `openDock(id)` opens one of the host's docks.
 - **`DesignerSession`**: the Level Designer as a module sees it, handed to `saveEditorData`, `restoreEditorData`, status controls and side-panel sections. `CommandContext` carries it as `session`, and `host` for what dispatched the command.

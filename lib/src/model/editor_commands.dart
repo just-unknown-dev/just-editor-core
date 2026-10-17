@@ -389,6 +389,32 @@ class EntitySpec {
     siblingIndex: index,
   );
 
+  /// A copy whose transform [edit] changes — moved, turned, sized — for
+  /// duplicate and array operations in space: under the same parent, just
+  /// after the original.
+  EntitySpec transformed(
+    void Function(jge.TransformComponent transform) edit, {
+    String? newName,
+  }) {
+    final changed = <Map<String, dynamic>>[];
+    for (final json in componentsJson) {
+      final component = codec.decode(json);
+      if (component is! jge.TransformComponent) {
+        changed.add(json);
+        continue;
+      }
+      edit(component);
+      changed.add(codec.encode(component) ?? json);
+    }
+    return EntitySpec(
+      name: newName ?? name,
+      componentsJson: changed,
+      codec: codec,
+      parentName: parentName,
+      siblingIndex: siblingIndex < 0 ? -1 : siblingIndex + 1,
+    );
+  }
+
   /// A copy shifted by [delta], for duplicate and array operations: under
   /// the same parent, just after the original.
   ///

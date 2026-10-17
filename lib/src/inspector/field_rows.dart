@@ -1202,6 +1202,12 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
     super.dispose();
   }
 
+  /// Whether [path] ends in `.` and one of [endings] (lower case).
+  static bool _hasEnding(String path, Iterable<String> endings) {
+    final lower = path.toLowerCase();
+    return endings.any((e) => lower.endsWith('.$e'));
+  }
+
   Future<void> _scanFiles() async {
     final base = Directory.current.path.replaceAll(r'\', '/');
     final assetsDir = Directory('$base/assets');
@@ -1213,8 +1219,8 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
         followLinks: false,
       )) {
         if (entity is File) {
-          final ext = entity.path.split('.').last.toLowerCase();
-          if (exts.contains(ext)) {
+          // By ending, so `material.json` (two dots) matches as `json` does.
+          if (_hasEnding(entity.path, exts)) {
             final relative = entity.path
                 .replaceAll(r'\', '/')
                 .replaceFirst('$base/', '');
@@ -1292,12 +1298,10 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
             ),
             Expanded(
               child: DragTarget<String>(
-                onWillAcceptWithDetails: (details) {
-                  final ext = details.data.split('.').last.toLowerCase();
-                  return widget.extensions
-                      .map((e) => e.toLowerCase())
-                      .contains(ext);
-                },
+                onWillAcceptWithDetails: (details) => _hasEnding(
+                  details.data,
+                  widget.extensions.map((e) => e.toLowerCase()),
+                ),
                 onAcceptWithDetails: (details) => _selectPath(details.data),
                 builder: (context, candidateData, rejectedData) {
                   Color borderColor = EditorTheme.border;

@@ -8,6 +8,7 @@ import '../grid/square_grid.dart';
 import '../level_designer_controller.dart';
 import '../../model/modifier_keys.dart';
 import '../snap_provider.dart';
+import '../space_context.dart';
 import '../../view/editor_view.dart';
 
 /// Which mouse button began a gesture.
@@ -93,6 +94,7 @@ class ToolContext {
     this.grid = const SquareGrid(),
     this.button = ToolButton.primary,
     this.clickCount = 1,
+    this.space,
   }) : modifiers =
            modifiers ??
            ModifierKeys(
@@ -157,6 +159,12 @@ class ToolContext {
 
   /// The gesture began with the second press of a double-click, or later.
   bool get isDoubleClick => clickCount >= 2;
+
+  /// In a 3-D scene, the ray through the pointer and what it meets; null in
+  /// 2-D, where [worldPosition] is the point. A 3-D tool works from this:
+  /// [worldPosition] is where the ray crosses the camera's z = 0 plane,
+  /// which in space is a wall, not the ground.
+  final SpaceContext? space;
 
   final T? Function<T extends Object>()? _stateOf;
 
@@ -261,6 +269,11 @@ abstract class LevelToolHandler {
   /// Pointer moved with no button down — for showing what a click would
   /// do, like a brush under the cursor.
   void onPointerHover(ToolContext context) {}
+
+  /// The wheel turned by [delta] over the viewport while this tool is
+  /// active, before the view zooms: return true to keep it — Place spins
+  /// what it is about to place while Shift is held.
+  bool onScroll(ToolContext context, Offset delta) => false;
 
   /// Pointer left the viewport.
   void onPointerExit() {}

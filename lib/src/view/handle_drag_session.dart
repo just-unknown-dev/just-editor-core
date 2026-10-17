@@ -62,7 +62,10 @@ final class HandleDragSession {
     _down = screen;
     _moved = false;
     _alt = alt;
-    _edit = ComponentEdit.begin(scope, _active!.component);
+    _edit = ComponentEdit.beginAll(scope, [
+      _active!.component,
+      ..._active!.alsoEdits,
+    ]);
     return true;
   }
 

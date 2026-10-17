@@ -193,6 +193,7 @@ abstract final class OverlaySettingsPrefKeys {
   static const String prefNudgeDistance = 'editor.edit.nudgeDistance';
   static const String prefSmartSnap = 'editor.edit.smartSnap';
   static const String prefMoveStep = 'editor.edit.moveStep';
+  static const String prefMoveStep3D = 'editor.edit.moveStep3D';
   static const String prefUndoLimit = 'editor.edit.undoLimit';
   static const String prefConfirmDelete = 'editor.edit.confirmDelete';
   static const String prefClosePrompt = 'editor.edit.closePrompt';

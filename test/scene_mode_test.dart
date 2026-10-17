@@ -74,7 +74,30 @@ void main() {
     expect(tools.all.map((t) => t.id), containsAll(['flat', 'any']));
     mode = SceneMode.threeD;
     expect(tools.all.map((t) => t.id), ['any']);
+    expect(
+      tools.byId('flat'),
+      isNull,
+      reason: 'a hidden tool must not stay in hand',
+    );
+    mode = SceneMode.twoD;
     expect(tools.byId('flat'), isNotNull, reason: 'still registered');
+
+    // One id, a tool for each mode: whoever asks by id gets the scene's.
+    final flat = _Tool('select', Dimensions.twoD);
+    final deep = _Tool('select', Dimensions.threeD);
+    tools
+      ..register(flat)
+      ..register(deep);
+    expect(tools.byId('select'), same(flat));
+    mode = SceneMode.threeD;
+    expect(tools.byId('select'), same(deep));
+    expect(tools.all.where((t) => t.id == 'select'), [deep]);
+    // Registering one for both modes replaces both.
+    final both = _Tool('select', Dimensions.both);
+    tools.register(both);
+    expect(tools.byId('select'), same(both));
+    mode = SceneMode.twoD;
+    expect(tools.byId('select'), same(both));
 
     final overlays = OverlayRegistry();
     expect(overlays.all, isEmpty);

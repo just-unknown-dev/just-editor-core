@@ -4,6 +4,7 @@ import 'package:just_game_engine/just_game_engine.dart' as jge;
 import '../scope/editor_scope.dart';
 import 'asset_index.dart';
 import 'audio_drop.dart';
+import '../view/ray_entity_picker.dart';
 
 /// What a file is, as far as the editor cares: how the asset browser draws
 /// it, what it can be filtered by, and what dropping it on the viewport
@@ -234,6 +235,7 @@ final class AssetDrop {
     required this.scope,
     required this.path,
     required this.at,
+    this.surface,
     required jge.Entity Function(List<jge.Component> components, String? name)
     place,
   }) : _place = place;
@@ -247,6 +249,11 @@ final class AssetDrop {
   /// Where it landed in the world: on the ground (y = 0) in 3-D, on the
   /// view's plane in 2-D.
   final jge.Vector3 at;
+
+  /// In 3-D, the surface it landed on — what is under the pointer, or the
+  /// working plane — and which way that faces; null in 2-D. [at] is its
+  /// point.
+  final SurfacePoint? surface;
 
   final jge.Entity Function(List<jge.Component> components, String? name)
   _place;

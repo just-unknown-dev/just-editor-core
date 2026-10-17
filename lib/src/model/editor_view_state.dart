@@ -58,6 +58,25 @@ class EditorViewState {
   bool isHidden(jge.EntityId id) => hidden.value.contains(id);
   bool isLocked(jge.EntityId id) => locked.value.contains(id);
 
+  /// Whether [entity] is hidden — itself, or a group it is in: hiding a
+  /// group hides what it holds.
+  bool isHiddenIn(jge.Entity entity) => _inChain(entity, hidden.value);
+
+  /// Whether [entity] is locked — itself, or a group it is in.
+  bool isLockedIn(jge.Entity entity) => _inChain(entity, locked.value);
+
+  static bool _inChain(jge.Entity entity, Set<jge.EntityId> ids) {
+    if (ids.isEmpty) return false;
+    jge.Entity? at = entity;
+    for (var guard = 0; at != null && guard < 64; guard++) {
+      if (ids.contains(at.id)) return true;
+      final parent = at.getComponent<jge.ParentComponent>()?.parentId;
+      if (parent == null) return false;
+      at = at.world?.getEntity(parent);
+    }
+    return false;
+  }
+
   void setHidden(Iterable<jge.EntityId> ids, {required bool hidden}) {
     final next = Set<jge.EntityId>.from(this.hidden.value);
     hidden ? next.addAll(ids) : next.removeAll(ids);

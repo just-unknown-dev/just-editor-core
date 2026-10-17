@@ -39,6 +39,7 @@ final class ViewportHandle {
     required this.position,
     required this.component,
     required this.onDrag,
+    this.alsoEdits = const [],
     this.onClick,
     this.style = ViewportHandleStyle.point,
     this.tooltip,
@@ -49,6 +50,10 @@ final class ViewportHandle {
 
   /// What a drag or click changes: its saved fields are recorded for undo.
   final jge.Component component;
+
+  /// Other components a drag changes with [component] — where the entity
+  /// stands, as a face is pulled — recorded in the same undo step.
+  final List<jge.Component> alsoEdits;
 
   /// Called as it is dragged; changes [component].
   final void Function(HandleDrag drag) onDrag;

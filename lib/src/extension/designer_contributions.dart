@@ -36,10 +36,16 @@ class SidePanelSection {
     required this.build,
     this.order = 100,
     this.expand = false,
+    this.groups,
   });
 
   final String id;
   final String title;
+
+  /// The tool groups ([LevelToolHandler.group]) it opens for — its tools'
+  /// own — and shut for the rest until opened; null to be open whatever the
+  /// tool.
+  final Set<String>? groups;
 
   /// Lower sorts first.
   final int order;

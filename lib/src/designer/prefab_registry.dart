@@ -49,7 +49,13 @@ class PrefabDefinition {
     this.depth,
     this.dimensions = jge.Dimensions.twoD,
     this.buildAt,
+    this.instanceOf,
   });
+
+  /// The prefab file (`*.prefab.json`) this places an instance of — its
+  /// entities, kept in step with the file — instead of what [build]
+  /// makes; null for a prefab of components.
+  final String? instanceOf;
 
   /// Which scene modes the palette offers it in. 2-D unless it says
   /// otherwise: [build] places it by a 2-D point and size.

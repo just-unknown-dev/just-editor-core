@@ -8,7 +8,7 @@ A kit or an editor plugin — `just_platformer_kit`, `just_ui_editor`, the sprit
 
 ```yaml
 dependencies:
-  just_editor_core: ^0.1.0
+  just_editor_core: ^0.1.0-dev.1
 ```
 
 ## A module

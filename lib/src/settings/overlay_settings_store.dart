@@ -67,6 +67,7 @@ class OverlaySettingsStore {
       OverlaySettingsPrefKeys.prefNudgeDistance: '${s.nudgeDistance}',
       OverlaySettingsPrefKeys.prefSmartSnap: '${s.smartSnap}',
       OverlaySettingsPrefKeys.prefMoveStep: '${s.moveStep}',
+      OverlaySettingsPrefKeys.prefMoveStep3D: '${s.moveStep3D}',
       OverlaySettingsPrefKeys.prefUndoLimit: '${s.undoLimit}',
       OverlaySettingsPrefKeys.prefConfirmDelete: '${s.confirmDelete}',
       OverlaySettingsPrefKeys.prefClosePrompt: s.closePrompt.name,
@@ -237,6 +238,11 @@ class OverlaySettingsStore {
         OverlaySettingsPrefKeys.prefMoveStep,
         d.moveStep,
         OverlayUiSettings.moveStepRange,
+      ),
+      moveStep3D: decimal(
+        OverlaySettingsPrefKeys.prefMoveStep3D,
+        d.moveStep3D,
+        OverlayUiSettings.moveStep3DRange,
       ),
       undoLimit: whole(
         OverlaySettingsPrefKeys.prefUndoLimit,

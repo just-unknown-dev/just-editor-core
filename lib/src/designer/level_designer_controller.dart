@@ -197,7 +197,7 @@ class LevelDesignerController {
   /// Whether [entity] can be picked in the viewport right now.
   bool isPickable(jge.Entity entity) {
     if (!isShownInViewport(entity)) return false;
-    if (lockedEntities.value.contains(entity.id)) return false;
+    if (view.isLockedIn(entity)) return false;
     final layer = entity.getComponent<jge.LayerComponent>();
     if (layer?.mapLayer != null) {
       return !(mapLayerOf?.call(entity)?.locked ?? false);
@@ -212,6 +212,10 @@ class LevelDesignerController {
   /// A signal rather than plain state because the status bar shows its size as
   /// you drag; the canvas reads it directly during paint.
   final Signal<Rect?> dragRect = Signal(null, debugLabel: 'dragRect');
+
+  /// In 3-D: the marquee being dragged, in screen pixels — there is no one
+  /// plane to hold it in the world.
+  final Signal<Rect?> screenRect = Signal(null, debugLabel: 'screenRect');
 
   /// Alignment guides dragged out from the rulers.
   final Signal<List<DesignerGuide>> guides = Signal(
@@ -265,7 +269,7 @@ class LevelDesignerController {
   /// Whether [entity] is drawn in the viewport while authoring — neither it
   /// nor its layer is hidden, and it is within the designer's reach.
   bool isShownInViewport(jge.Entity entity) {
-    if (hiddenEntities.value.contains(entity.id)) return false;
+    if (view.isHiddenIn(entity)) return false;
     // Everything but the Level Map, while designing: out of reach, and out
     // of sight with it.
     if (!sceneState.canSelect(entity)) return false;
@@ -343,6 +347,7 @@ class LevelDesignerController {
     hiddenLayers.dispose();
     lockedLayers.dispose();
     dragRect.dispose();
+    screenRect.dispose();
     guides.dispose();
     showRulers.dispose();
     hiddenOverlays.dispose();

@@ -98,6 +98,7 @@ class OverlayUiSettings {
     this.scaleStep = defaultScaleStep,
     this.nudgeDistance = 0,
     this.moveStep = 0,
+    this.moveStep3D = defaultMoveStep3D,
     this.smartSnap = true,
     this.gridColour = defaultGridColour,
     this.gridOpacity = 1,
@@ -144,6 +145,7 @@ class OverlayUiSettings {
       scaleStep = defaultScaleStep,
       nudgeDistance = 0,
       moveStep = 0,
+      moveStep3D = defaultMoveStep3D,
       smartSnap = true,
       gridColour = defaultGridColour,
       gridOpacity = 1,
@@ -196,6 +198,12 @@ class OverlayUiSettings {
 
   /// World units; 0 is the grid's own.
   static const SettingRange moveStepRange = SettingRange(0, 256);
+
+  /// Metres.
+  static const SettingRange moveStep3DRange = SettingRange(0.01, 10);
+
+  /// What moving snaps in, in a 3-D scene, out of the box: a quarter metre.
+  static const double defaultMoveStep3D = 0.25;
 
   /// A multiple of the grid's own faint lines.
   static const SettingRange gridOpacityRange = SettingRange(0.25, 3);
@@ -286,6 +294,10 @@ class OverlayUiSettings {
   /// World units moving snaps in, whatever the grid drawn; 0 is the grid's
   /// own size. On a grid of hexagons moving snaps to the cells.
   final double moveStep;
+
+  /// Metres moving snaps in, in a 3-D scene: the gizmo, the handles, where
+  /// the 3-D Level Designer places things, and its grid.
+  final double moveStep3D;
 
   /// What moving snaps in on a grid of [gridSize]: [moveStep], or the grid.
   double moveStepFor(double gridSize) => moveStep > 0 ? moveStep : gridSize;
@@ -402,6 +414,7 @@ class OverlayUiSettings {
     double? scaleStep,
     double? nudgeDistance,
     double? moveStep,
+    double? moveStep3D,
     bool? smartSnap,
     Color? gridColour,
     double? gridOpacity,
@@ -449,6 +462,7 @@ class OverlayUiSettings {
       scaleStep: scaleStep ?? this.scaleStep,
       nudgeDistance: nudgeDistance ?? this.nudgeDistance,
       moveStep: moveStep ?? this.moveStep,
+      moveStep3D: moveStep3D ?? this.moveStep3D,
       smartSnap: smartSnap ?? this.smartSnap,
       gridColour: gridColour ?? this.gridColour,
       gridOpacity: gridOpacity ?? this.gridOpacity,
@@ -513,6 +527,7 @@ class OverlayUiSettings {
       other.scaleStep == scaleStep &&
       other.nudgeDistance == nudgeDistance &&
       other.moveStep == moveStep &&
+      other.moveStep3D == moveStep3D &&
       other.smartSnap == smartSnap &&
       other.gridColour == gridColour &&
       other.gridOpacity == gridOpacity &&
@@ -563,7 +578,7 @@ class OverlayUiSettings {
       rotationStep,
       scaleStep,
       nudgeDistance,
-      moveStep,
+      Object.hash(moveStep, moveStep3D),
       smartSnap,
       undoLimit,
       confirmDelete,

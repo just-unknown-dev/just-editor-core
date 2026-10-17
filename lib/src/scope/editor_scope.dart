@@ -10,6 +10,8 @@ import '../validation/scene_validator.dart';
 import '../project/project_colours.dart';
 import '../extension/editor_module.dart';
 import '../designer/layer_preset.dart';
+import '../designer/prefab_pictures.dart';
+import '../extension/level_aids.dart';
 import '../designer/prefab_registry.dart';
 import '../inspector/component_extras.dart';
 import '../inspector/field_editor.dart';
@@ -32,6 +34,7 @@ import '../project/project_physics_layers.dart';
 import '../project/project_tags.dart';
 import '../project/tag_references.dart';
 import '../model/editor_scene_state.dart';
+import '../model/designer_3d_state.dart';
 import '../model/editor_view_state.dart';
 import '../extension/tiled_object_mapper.dart';
 import '../view/editor_view.dart';
@@ -105,7 +108,13 @@ class EditorScope {
         EditorChromeState.new,
         dispose: (c) => c.dispose(),
       )
-      ..registerLazySingleton<SceneCodec>(() => SceneCodec(defs))
+      ..registerLazySingleton<SceneCodec>(
+        () => SceneCodec(
+          defs,
+          // The prefab files the edited engine has read, as it reads them.
+          prefabs: (path) => PrefabLibrary.of(context).loaded(path),
+        ),
+      )
       ..registerLazySingleton<FieldEditorRegistry>(FieldEditorRegistry.new)
       ..registerLazySingleton<ComponentExtrasRegistry>(
         ComponentExtrasRegistry.new,
@@ -134,6 +143,10 @@ class EditorScope {
       ..registerLazySingleton<EditorViewState>(
         EditorViewState.new,
         dispose: (v) => v.dispose(),
+      )
+      ..registerLazySingleton<Designer3DState>(
+        Designer3DState.new,
+        dispose: (d) => d.dispose(),
       )
       ..registerLazySingleton<ProjectTags>(() {
         _tagsMade = true;
@@ -191,6 +204,7 @@ class EditorScope {
     log.maxEntries = s.consoleMaxEntries;
     sceneState
       ..moveStep = s.moveStep
+      ..moveStep3D = s.moveStep3D
       ..scaleStep = s.scaleStep
       ..rotationStep = s.rotationStepRadians;
     if (!identical(s.shortcuts, _appliedShortcuts)) {
@@ -314,6 +328,42 @@ class EditorScope {
   final List<FieldAccessory> _fieldAccessories = [];
   final List<EditorMarker> _markers = [];
   final List<EntityRayTest> _pickTests = [];
+  final List<PrefabPicture> _prefabPictures = [];
+
+  /// What the modules know about how levels are played: each one's
+  /// [LevelAids].
+  List<LevelAids> get levelAids => [
+    for (final module in modules.withBuiltIns) ?module.levelAids,
+  ];
+
+  /// How the player moves, by the first module that knows; null when none
+  /// does.
+  MovementProfile? get movement {
+    for (final aids in levelAids) {
+      final profile = aids.movementOf(world);
+      if (profile != null) return profile;
+    }
+    return null;
+  }
+
+  /// The kill height, by the first module that knows; null for none.
+  double? get killHeight {
+    for (final aids in levelAids) {
+      final height = aids.killHeight(world);
+      if (height != null) return height;
+    }
+    return null;
+  }
+
+  /// [prefab]'s picture for the palette, [size] pixels square: the first
+  /// module's that draws one; null for its icon.
+  Widget? prefabPictureOf(PrefabDefinition prefab, double size) {
+    for (final picture in _prefabPictures) {
+      final drawn = picture(prefab, size);
+      if (drawn != null) return drawn;
+    }
+    return null;
+  }
 
   /// The icons the viewport draws at entities of a kind: the editor's own,
   /// then each module's.
@@ -387,7 +437,16 @@ class EditorScope {
   /// (a module's — the editor's own 3-D view among them — see
   /// [EditorModule.viewFactories], else the 2-D view on [mainCamera]). One
   /// per mode, kept; switching mode hands the camera to the other.
-  EditorView get editorView {
+  EditorView get editorView => viewOverride ?? sceneView;
+
+  /// A view standing in for [editorView] while one pane of a split viewport
+  /// is drawn or handled: everything that picks, places or paints through
+  /// the editor's view then works in that pane. Null otherwise.
+  EditorView? viewOverride;
+
+  /// The view of the open scene's mode, whatever stands in for it (see
+  /// [viewOverride]).
+  EditorView get sceneView {
     final mode = sceneState.editingMode;
     final view = _views[mode] ??= (_viewFactories[mode] ?? _flatView)(this);
     if (_viewMode != mode) {
@@ -414,6 +473,7 @@ class EditorScope {
     final camera = _mainCamera();
     if (camera.isPlanar) return;
     camera
+      ..inSpace = false
       ..lens = const CameraLens()
       ..pitch = 0
       ..yaw = 0
@@ -584,26 +644,42 @@ class EditorScope {
     debugLabel: 'activeDesigner',
   );
 
-  /// The modules that bring a level designer of their own, in registration
-  /// order: what the designer's switch lists after the built-in one.
-  List<EditorModule> get designers => [
+  /// The modules that bring a level designer of their own for the open
+  /// scene's mode, in registration order: what the designer's switch lists
+  /// after the built-in one.
+  List<EditorModule> get designers => designersFor(sceneState.editingMode);
+
+  /// The modules that are a level designer for [mode]
+  /// ([EditorModule.designerModes]).
+  List<EditorModule> designersFor(SceneMode mode) => [
     for (final module in modules.all)
-      if (module.providesLevelDesigner) module,
+      if (module.designerModes.contains(mode)) module,
   ];
 
   /// The modules whose designer contributions are live: the chosen
-  /// designer's, or none for the built-in one.
+  /// designer's while the open scene is of a mode it designs, or none for
+  /// the built-in one.
   List<EditorModule> get designerModules {
-    final id = activeDesigner.value;
-    return id == null ? const [] : [?modules.byId(id)];
+    final module = _designerFor(activeDesigner.value);
+    return module == null ? const [] : [module];
+  }
+
+  /// [id]'s module when it designs the open scene's mode.
+  EditorModule? _designerFor(String? id) {
+    final module = id == null ? null : modules.byId(id);
+    return module != null &&
+            module.designerModes.contains(sceneState.editingMode)
+        ? module
+        : null;
   }
 
   /// Switches the Level Designer to [id]'s module, or to the built-in one
-  /// for null or an unknown id. Prefabs, layers, grid, palette categories,
-  /// status controls and side-panel sections follow at once; an open
-  /// session reloads its tools, overlays and module state.
+  /// for null, an unknown id or a module that does not design the open
+  /// scene's mode. Prefabs, layers, grid, palette categories, status
+  /// controls and side-panel sections follow at once; an open session
+  /// reloads its tools, overlays and module state.
   void selectDesigner(String? id) {
-    final next = id != null && modules.byId(id) != null ? id : null;
+    final next = _designerFor(id) == null ? null : id;
     if (activeDesigner.value == next) return;
     // Rebuilt before anyone hears about it, so a listener sees the new
     // palette and grid rather than the old ones.
@@ -678,6 +754,10 @@ class EditorScope {
   /// What is hidden and what is locked against picking — editor-only, and
   /// there whether or not the Level Designer is open.
   EditorViewState get view => container.get<EditorViewState>();
+
+  /// How the 3-D Level Designer is set up to build: its working plane.
+  /// Editor-only, like [view].
+  Designer3DState get designer3D => container.get<Designer3DState>();
 
   /// The camera new entities are placed in front of; a bare one before the
   /// engine has a viewport, which is all a HUD's entities need.
@@ -811,6 +891,7 @@ class EditorScope {
     _viewFactories.clear();
     _markers.clear();
     _pickTests.clear();
+    _prefabPictures.clear();
     _viewportOverlays.clear();
     _viewportHandles.clear();
     _prefabVariants.clear();
@@ -839,6 +920,7 @@ class EditorScope {
       _viewFactories.addAll(module.viewFactories);
       _markers.addAll(module.markers);
       _pickTests.addAll(module.pickTests);
+      _prefabPictures.addAll(module.prefabPictures);
       module.assetKinds.forEach(kinds.add);
       _viewportOverlays.addAll(module.viewportOverlays);
       _viewportHandles.addAll(module.viewportHandles);
@@ -884,9 +966,10 @@ class EditorScope {
     _rowDecorations.sort((a, b) => a.order.compareTo(b.order));
     _entityIcons.sort((a, b) => a.order.compareTo(b.order));
     _inspectorSections.sort((a, b) => a.order.compareTo(b.order));
-    // A designer whose module went away falls back to the built-in one.
+    // A designer whose module went away, or no longer designs this kind of
+    // scene, falls back to the built-in one.
     final active = activeDesigner.value;
-    if (active != null && modules.byId(active) == null) {
+    if (active != null && _designerFor(active) == null) {
       activeDesigner.setSilent(null);
     }
     _rebuildDesigner();

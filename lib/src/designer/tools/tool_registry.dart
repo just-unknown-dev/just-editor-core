@@ -9,13 +9,16 @@ import 'level_tool.dart';
 class ToolRegistry {
   ToolRegistry();
 
-  final Map<String, LevelToolHandler> _tools = {};
+  // By id, each id's tools for the modes they cover: one id may name a 2-D
+  // tool and a 3-D one — Select is both — so whatever switches to it by id
+  // finds the one for the scene in hand.
+  final Map<String, List<LevelToolHandler>> _tools = {};
   final Map<String, ToolGroup> _groups = {
     for (final g in ToolGroups.builtIn) g.id: g,
   };
 
   /// The mode of the scene being edited; tools that do not belong in it are
-  /// left out of [all] and [byShortcut]. Null offers everything.
+  /// left out of [all], [byId] and [byShortcut]. Null offers everything.
   jge.SceneMode Function()? modeOf;
 
   bool _offered(LevelToolHandler tool) {
@@ -23,10 +26,12 @@ class ToolRegistry {
     return mode == null || tool.dimensions.allows(mode);
   }
 
+  Iterable<LevelToolHandler> get _registered => _tools.values.expand((t) => t);
+
   /// The registered tools for the scene's mode, in palette order: by group,
   /// then within it.
   List<LevelToolHandler> get all {
-    final sorted = _tools.values.where(_offered).toList()
+    final sorted = _registered.where(_offered).toList()
       ..sort((a, b) {
         final byGroup = groupOf(
           a.group,
@@ -57,21 +62,35 @@ class ToolRegistry {
   /// Registers [group], replacing any of the same id.
   void registerGroup(ToolGroup group) => _groups[group.id] = group;
 
-  /// Looks up a tool by [LevelToolHandler.id].
-  LevelToolHandler? byId(String id) => _tools[id];
+  /// The tool called [id] for the scene's mode: null when there is none,
+  /// or only one for the other mode.
+  LevelToolHandler? byId(String id) {
+    for (final tool in _tools[id] ?? const <LevelToolHandler>[]) {
+      if (_offered(tool)) return tool;
+    }
+    return null;
+  }
 
   /// The tool bound to [shortcut], if any.
   LevelToolHandler? byShortcut(String shortcut) {
     final wanted = shortcut.toUpperCase();
-    for (final tool in _tools.values) {
+    for (final tool in _registered) {
       if (!_offered(tool)) continue;
       if (tool.shortcut?.toUpperCase() == wanted) return tool;
     }
     return null;
   }
 
-  /// Registers [tool], replacing any existing one with the same id.
-  void register(LevelToolHandler tool) => _tools[tool.id] = tool;
+  /// Registers [tool], replacing any of the same id for the same modes: a
+  /// 3-D tool beside a 2-D one of its id leaves that one be.
+  void register(LevelToolHandler tool) {
+    final same = _tools.putIfAbsent(tool.id, () => []);
+    same.removeWhere((t) => _overlap(t.dimensions, tool.dimensions));
+    same.add(tool);
+  }
+
+  static bool _overlap(jge.Dimensions a, jge.Dimensions b) =>
+      a == b || a == jge.Dimensions.both || b == jge.Dimensions.both;
 
   /// Registers several tools.
   void registerAll(Iterable<LevelToolHandler> tools) {
@@ -100,6 +119,9 @@ abstract final class BuiltInTools {
 
   /// Drag out a rectangle to place the active prefab.
   static const String draw = 'draw';
+
+  /// In 3-D: click to place the active prefab on what is under the pointer.
+  static const String place = 'place';
 
   /// Brush, rectangle fill and eraser on the grid.
   static const String paint = 'paint';

@@ -3,6 +3,7 @@ import 'package:just_game_engine/just_game_engine.dart' as jge;
 
 import 'editor_view.dart';
 import 'entity_picker.dart';
+import 'ray_triangles.dart';
 
 /// Knows the real shape of some entities — a 3-D model's triangles — so a
 /// pick lands on what is drawn, not on its box. Modules offer these
@@ -12,6 +13,28 @@ abstract interface class EntityRayTest {
   /// [entity]'s shape: [double.infinity] for a miss, or null when this test
   /// does not know the entity (its box then decides).
   double? distanceTo(jge.Entity entity, jge.Ray3 ray);
+}
+
+/// Knows the corners of some entities' real shape — a model's vertices, a
+/// 3-D shape's — so a move can put one thing's corner on another's (hold V
+/// while dragging). Pick tests that know an entity's triangles offer it
+/// too.
+abstract interface class EntityVertexSource {
+  /// [entity]'s vertices in the world, or null when this source does not
+  /// know it.
+  List<jge.Vector3>? verticesOf(jge.Entity entity);
+}
+
+/// Knows where a ray meets some entities' real surface and which way it
+/// faces there — a model's triangles, a 3-D shape's — so something placed
+/// on a slope or a ball sits on it, not on its box. Pick tests that know
+/// an entity's triangles offer it too.
+abstract interface class EntitySurfaceTest {
+  /// Where [ray] first meets [entity]'s shape: how far along it (in units
+  /// of its direction) and the surface's facing in the world, towards the
+  /// ray's start. Null when this test does not know the entity; an
+  /// infinite [RayTriangleHit.t] for a miss.
+  RayTriangleHit? surfaceHit(jge.Entity entity, jge.Ray3 ray);
 }
 
 /// A point on a surface in space and which way the surface faces there:
@@ -81,28 +104,66 @@ class RayEntityPicker implements EntityPicker {
   }
 
   /// Where something placed at [screen] goes: on the nearest of
-  /// [candidates] under the pointer — the face of its box it meets, facing
-  /// out — or else on the ground, facing up.
+  /// [candidates] under the pointer ([placementAlong]), or else on the
+  /// ground, facing up.
   SurfacePoint placementAt(EditorView view, Offset screen, Iterable<jge.Entity> candidates) {
     view.screenToRay(screen, _ray);
+    return placementAlong(_ray, candidates) ??
+        SurfacePoint(view.screenToGround(screen), jge.Vector3(0, -1, 0));
+  }
+
+  /// Where [ray] first meets one of [candidates]: its real surface where
+  /// an [EntitySurfaceTest] knows it (a miss of its shape passes through,
+  /// as through an arch), else the face of its box, facing out. Null when
+  /// it meets none.
+  SurfacePoint? placementAlong(jge.Ray3 ray, Iterable<jge.Entity> candidates) {
+    final hits = <(double, jge.Entity, jge.Aabb3)>[];
+    for (final entity in candidates) {
+      final box = jge.Aabb3();
+      if (!boundsOf(entity, box)) continue;
+      final t = ray.intersectAabb(box);
+      if (t != null && t >= 0) hits.add((t, entity, box));
+    }
+    if (hits.isEmpty) return null;
+    hits.sort((a, b) => a.$1.compareTo(b.$1));
+    final tests = [
+      ...?_tests?.call().whereType<EntitySurfaceTest>(),
+    ];
     var bestT = double.infinity;
     jge.Entity? onto;
-    final box = jge.Aabb3();
-    for (final entity in candidates) {
-      if (!boundsOf(entity, _box)) continue;
-      final t = _ray.intersectAabb(_box);
-      if (t != null && t > 0 && t < bestT) {
-        bestT = t;
+    jge.Vector3? facing;
+    jge.Aabb3? ontoBox;
+    for (final (boxT, entity, box) in hits) {
+      // A box no nearer than the best hit can't hold a nearer one.
+      if (boxT >= bestT) break;
+      RayTriangleHit? exact;
+      for (final test in tests) {
+        exact = test.surfaceHit(entity, ray);
+        if (exact != null) break;
+      }
+      if (exact != null) {
+        if (exact.t < bestT) {
+          bestT = exact.t;
+          onto = entity;
+          facing = exact.normal;
+          ontoBox = null;
+        }
+      } else if (boxT > 0 && boxT < bestT) {
+        bestT = boxT;
         onto = entity;
-        box.setFrom(_box);
+        facing = null;
+        ontoBox = box;
       }
     }
-    if (onto == null) {
-      return SurfacePoint(view.screenToGround(screen), jge.Vector3(0, -1, 0));
-    }
+    if (onto == null) return null;
     final at = jge.Vector3.zero();
-    _ray.atInto(bestT, at);
-    // The face it met: the side the point is nearest, for its box's size.
+    ray.atInto(bestT, at);
+    return SurfacePoint(at, facing ?? _faceOf(at, ontoBox!), onto: onto);
+  }
+
+  /// Which face of [box] [at] is on: the side it is nearest, for the box's
+  /// size, facing out.
+  static jge.Vector3 _faceOf(jge.Vector3 at, jge.Aabb3 box) {
     final size = jge.Vector3.zero();
     box.sizeInto(size);
     double near(double v, double lo, double hi, double extent) {
@@ -118,7 +179,7 @@ class RayEntityPicker implements EntityPicker {
         : dx <= dz
         ? jge.Vector3(side(at.x, box.min.x, box.max.x), 0, 0)
         : jge.Vector3(0, 0, side(at.z, box.min.z, box.max.z));
-    return SurfacePoint(at, normal, onto: onto);
+    return normal;
   }
 
   @override
@@ -142,17 +203,28 @@ class RayEntityPicker implements EntityPicker {
   static bool boundsOf(jge.Entity entity, jge.Aabb3 out) {
     final transform = entity.getComponent<jge.TransformComponent>();
     if (transform == null) return false;
-    final definitions = entity.world?.context.definitions;
-    _local.setEmpty();
-    if (definitions != null) {
-      for (final component in entity.components) {
-        final extent = definitions.definitionFor(component)?.extent;
-        if (extent != null && extent.boundsInto(component, _part)) _local.addBox(_part);
-      }
-    }
-    if (_local.isEmpty) _local.setValues(-0.25, -0.25, -0.25, 0.25, 0.25, 0.25);
+    localBoundsOf(entity.components, entity.world?.context.definitions, _local);
     transform.localToWorldInto(_matrix);
     _local.transformInto(_matrix, out);
     return true;
+  }
+
+  /// The box [components] take up about their entity's origin, before its
+  /// transform: the union of their 3-D extents ([definitions] knows them),
+  /// or a half-metre cube when none has one. What a box in space is built
+  /// from — and a preview of something not made yet.
+  static void localBoundsOf(
+    Iterable<jge.Component> components,
+    jge.ComponentDefinitionRegistry? definitions,
+    jge.Aabb3 out,
+  ) {
+    out.setEmpty();
+    if (definitions != null) {
+      for (final component in components) {
+        final extent = definitions.definitionFor(component)?.extent;
+        if (extent != null && extent.boundsInto(component, _part)) out.addBox(_part);
+      }
+    }
+    if (out.isEmpty) out.setValues(-0.25, -0.25, -0.25, 0.25, 0.25, 0.25);
   }
 }

@@ -1,0 +1,98 @@
+/// What a module builds on: the editor's module contract, its scope and
+/// services, the undo history and commands, the inspector's rows and
+/// field editors, the Level Designer's tool and overlay API, and the UI
+/// kit — everything a kit or an editor plugin needs, and nothing of the
+/// editor's own windows.
+///
+/// The editor itself — `just_game_engine_editor` — hosts modules built on
+/// this.
+library;
+
+export 'src/designer/designer_canvas.dart';
+export 'src/designer/designer_config.dart';
+export 'src/designer/designer_geometry.dart';
+export 'src/designer/designer_overlay.dart';
+export 'src/designer/designer_session.dart';
+export 'src/designer/grid/grid_topology.dart';
+export 'src/designer/grid/square_grid.dart';
+export 'src/designer/layer_preset.dart';
+export 'src/designer/level_designer_controller.dart';
+export 'src/designer/prefab_registry.dart';
+export 'src/designer/selection_handle_layout.dart';
+export 'src/designer/smart_snap.dart';
+export 'src/designer/snap_provider.dart';
+export 'src/designer/tools/level_tool.dart';
+export 'src/designer/tools/path_tool.dart';
+export 'src/designer/tools/tool_registry.dart';
+export 'src/extension/asset_kind.dart';
+export 'src/extension/audio_drop.dart';
+export 'src/extension/designer_contributions.dart';
+export 'src/extension/editor_contributions.dart';
+export 'src/extension/editor_marker.dart';
+export 'src/extension/editor_module.dart';
+export 'src/extension/prefab_variant.dart';
+export 'src/extension/tiled_object_mapper.dart';
+export 'src/extension/viewport_handles.dart';
+export 'src/extension/viewport_overlay.dart';
+export 'src/inspector/add_component_picker.dart';
+export 'src/inspector/collection_editor.dart';
+export 'src/inspector/colour_picking.dart';
+export 'src/inspector/component_extras.dart';
+export 'src/inspector/definition_section.dart';
+export 'src/inspector/edge_insets_row.dart';
+export 'src/inspector/field_editor.dart';
+export 'src/inspector/field_rows.dart';
+export 'src/inspector/field_style.dart';
+export 'src/inspector/live_preview.dart';
+export 'src/look/editor_constants.dart'
+    show EditorTheme, GizmoConstants, OverlayLayout, kComponentGroups;
+export 'src/look/editor_material_theme.dart';
+export 'src/look/editor_metrics.dart';
+export 'src/look/editor_theme_data.dart';
+export 'src/look/kit/buttons.dart';
+export 'src/look/kit/controls.dart';
+export 'src/look/kit/dialog_frame.dart' show EditorDialogFrame;
+export 'src/look/kit/dialogs.dart';
+export 'src/look/kit/fields.dart';
+export 'src/look/kit/focus.dart';
+export 'src/look/kit/key_claim.dart';
+export 'src/look/kit/kit.dart';
+export 'src/look/kit/layout.dart';
+export 'src/look/kit/look.dart';
+export 'src/look/kit/workspace.dart';
+export 'src/look/snackbar.dart';
+export 'src/look/theme_controller.dart';
+export 'src/look/widgets/editor_dropdown.dart';
+export 'src/look/widgets/editor_menu.dart';
+export 'src/look/widgets/editor_scrollbar.dart';
+export 'src/look/widgets/scrubbable_number_field.dart';
+export 'src/model/component_registry.dart';
+export 'src/model/designer_command.dart';
+export 'src/model/editor_commands.dart';
+export 'src/model/editor_history.dart';
+export 'src/model/editor_scene.dart';
+export 'src/model/editor_scene_state.dart';
+export 'src/model/editor_view_state.dart';
+export 'src/model/hierarchy_commands.dart';
+export 'src/model/modifier_keys.dart';
+export 'src/model/scene_codec.dart';
+export 'src/model/scene_store.dart';
+export 'src/model/transform_mode.dart';
+export 'src/model/unknown_components.dart';
+export 'src/project/project_colours.dart';
+export 'src/project/project_physics_layers.dart';
+export 'src/project/project_tags.dart';
+export 'src/project/tag_references.dart';
+export 'src/scene_tree/scene_tree_model.dart';
+export 'src/scene_tree/scene_tree_row.dart';
+export 'src/scope/editor_scope.dart';
+export 'src/services/editor_log_service.dart';
+export 'src/services/package_asset_paths.dart';
+export 'src/settings/chrome_state.dart' show EditorChromeState;
+export 'src/settings/editor_prefs.dart';
+export 'src/settings/overlay_ui_settings.dart';
+export 'src/validation/scene_validator.dart';
+export 'src/view/editor_view.dart';
+export 'src/view/entity_picker.dart';
+export 'src/view/handle_drag_session.dart';
+export 'src/view/ray_entity_picker.dart';

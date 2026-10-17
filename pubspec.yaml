@@ -1,0 +1,28 @@
+name: just_editor_core
+description: "What a just_game_engine editor module builds on: the module contract, the editor's scope and services, undo, the inspector's rows and the UI kit."
+version: 0.1.0-dev.1
+homepage: https://justunknown.com
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_game_engine: ^2.0.0-dev.2
+  just_signals: ^1.0.2
+  just_di: ^1.0.0
+  just_debugger: ^0.0.1
+  just_colours: ^0.1.0
+  just_storage: ^1.2.1
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

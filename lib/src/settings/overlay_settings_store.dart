@@ -6,6 +6,7 @@ import 'package:just_storage/just_storage.dart';
 
 import '../look/editor_constants.dart';
 import '../look/theme_controller.dart';
+import 'gizmo_settings.dart';
 import 'overlay_ui_settings.dart';
 
 class OverlaySettingsStore {
@@ -76,6 +77,9 @@ class OverlaySettingsStore {
       OverlaySettingsPrefKeys.prefBackdrop: colour(s.backdrop),
       OverlaySettingsPrefKeys.prefGizmoScale: '${s.gizmoScale}',
       OverlaySettingsPrefKeys.prefSelectionColour: colour(s.selectionColour),
+      OverlaySettingsPrefKeys.prefGizmosEditor: s.gizmos.editor.encode(),
+      OverlaySettingsPrefKeys.prefGizmosDesigner: s.gizmos.designer.encode(),
+      OverlaySettingsPrefKeys.prefGizmosPlay: s.gizmos.play.encode(),
       OverlaySettingsPrefKeys.prefPauseOnError: '${s.pauseOnError}',
       OverlaySettingsPrefKeys.prefHideChromeWhilePlaying:
           '${s.hideChromeWhilePlaying}',
@@ -275,6 +279,20 @@ class OverlaySettingsStore {
       selectionColour: colour(
         OverlaySettingsPrefKeys.prefSelectionColour,
         d.selectionColour,
+      ),
+      gizmos: GizmoSettings(
+        editor: GizmoModeSettings.decode(
+          values[OverlaySettingsPrefKeys.prefGizmosEditor],
+          d.gizmos.editor,
+        ),
+        designer: GizmoModeSettings.decode(
+          values[OverlaySettingsPrefKeys.prefGizmosDesigner],
+          d.gizmos.designer,
+        ),
+        play: GizmoModeSettings.decode(
+          values[OverlaySettingsPrefKeys.prefGizmosPlay],
+          d.gizmos.play,
+        ),
       ),
       pauseOnError: flag(
         OverlaySettingsPrefKeys.prefPauseOnError,

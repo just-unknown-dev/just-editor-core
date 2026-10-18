@@ -268,11 +268,18 @@ class LevelDesignerController {
 
   /// Whether [entity] is drawn in the viewport while authoring — neither it
   /// nor its layer is hidden, and it is within the designer's reach.
-  bool isShownInViewport(jge.Entity entity) {
+  ///
+  /// Everything but the Level Map, while designing: out of reach, and out
+  /// of sight with it.
+  bool isShownInViewport(jge.Entity entity) =>
+      sceneState.canSelect(entity) && showsGizmosOf(entity);
+
+  /// Whether [entity]'s gizmos (its marker, frame, outline, path) may be
+  /// drawn while the designer's gizmos are shown: neither it nor its layer
+  /// hidden. What is off the Level Map counts: out of reach while
+  /// designing, its aids still show when they are asked for.
+  bool showsGizmosOf(jge.Entity entity) {
     if (view.isHiddenIn(entity)) return false;
-    // Everything but the Level Map, while designing: out of reach, and out
-    // of sight with it.
-    if (!sceneState.canSelect(entity)) return false;
     final layer = entity.getComponent<jge.LayerComponent>();
     if (layer?.mapLayer != null) {
       return mapLayerOf?.call(entity)?.visible ?? true;

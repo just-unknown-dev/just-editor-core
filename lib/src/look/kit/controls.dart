@@ -235,6 +235,9 @@ class _Segment extends StatelessWidget {
 ///
 /// [onChanged] follows the drag, for a live preview; [onChangeEnd] is the
 /// value to keep — at the end of a drag, or when a typed number is entered.
+/// While a drag lasts the slider and its number show the value dragged to
+/// whether or not [value] follows, so a preview need not rebuild what holds
+/// the slider at every step.
 /// [displayScale] and [unit] are how the number reads: 1.1 shown as `110%`
 /// is a scale of 100 and a unit of `%`.
 class EditorSlider extends StatefulWidget {
@@ -273,10 +276,34 @@ class _EditorSliderState extends State<EditorSlider> {
   );
   final FocusNode _focus = FocusNode();
 
+  // The value being dragged to, until the drag ends.
+  double? _dragging;
+
   @override
   void initState() {
     super.initState();
     _focus.addListener(_onFocus);
+  }
+
+  void _dragTo(double value) {
+    final snapped = _snap(value);
+    if (snapped == (_dragging ?? widget.value)) return;
+    setState(() {
+      _dragging = snapped;
+      if (!_focus.hasFocus) _text.text = _format(snapped);
+    });
+    widget.onChanged(snapped);
+  }
+
+  // Back to [EditorSlider.value] — which the end of the drag changes, when
+  // what holds the slider keeps it.
+  void _dragEnd(double value) {
+    final snapped = _snap(value);
+    setState(() {
+      _dragging = null;
+      if (!_focus.hasFocus) _text.text = _format(widget.value);
+    });
+    widget.onChangeEnd(snapped);
   }
 
   // Leaving the field keeps what was typed, as Enter does.
@@ -346,12 +373,14 @@ class _EditorSliderState extends State<EditorSlider> {
               showValueIndicator: ShowValueIndicator.never,
             ),
             child: Slider(
-              value: widget.value.clamp(widget.min, widget.max).toDouble(),
+              value: (_dragging ?? widget.value)
+                  .clamp(widget.min, widget.max)
+                  .toDouble(),
               min: widget.min,
               max: widget.max,
               divisions: divisions > 0 ? divisions : null,
-              onChanged: (v) => widget.onChanged(_snap(v)),
-              onChangeEnd: (v) => widget.onChangeEnd(_snap(v)),
+              onChanged: _dragTo,
+              onChangeEnd: _dragEnd,
             ),
           ),
         ),

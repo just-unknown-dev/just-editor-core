@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
+import '../settings/gizmo_settings.dart';
+
 import 'designer_canvas.dart';
 import '../model/editor_history.dart';
 import '../model/modifier_keys.dart';
@@ -13,7 +15,10 @@ class OverlayPaintContext {
     required this.draw,
     required this.world,
     required this.controller,
+    this.showsGizmo = _always,
   });
+
+  static bool _always(GizmoKind kind) => true;
 
   /// Screen-space drawing helpers and world/screen conversion.
   final DesignerCanvas draw;
@@ -23,6 +28,11 @@ class OverlayPaintContext {
 
   /// Designer state: selection, active tool, guides.
   final LevelDesignerController controller;
+
+  /// Whether gizmos of a kind are drawn now, in the editor's mode. An
+  /// overlay that is not a gizmo ([DesignerOverlay.gizmoKind] null) but
+  /// draws an outline beside its handles asks for [GizmoKind.selection].
+  final bool Function(GizmoKind kind) showsGizmo;
 
   /// The entity currently selected, if any.
   jge.Entity? get selected => controller.sceneState.selectedEntity.value;
@@ -36,6 +46,12 @@ class OverlayPaintContext {
   /// layer, or the designer keeping to the Level Map. An overlay about an
   /// entity draws nothing for one that is not.
   bool isShown(jge.Entity entity) => controller.isShownInViewport(entity);
+
+  /// Whether [entity]'s gizmos may be drawn: not hidden by its eye or its
+  /// layer, on the Level Map or off it. A gizmo overlay (its
+  /// [DesignerOverlay.gizmoKind] set) asks this rather than [isShown]: its
+  /// gizmos are drawn only once asked for, and then for the whole scene.
+  bool showsGizmosOf(jge.Entity entity) => controller.showsGizmosOf(entity);
 }
 
 /// Something drawn over the level in the designer viewport.
@@ -61,6 +77,14 @@ abstract class DesignerOverlay {
 
   /// Whether it starts visible.
   bool get defaultVisible => true;
+
+  /// Which kind of the editor's gizmos it is: an aid drawn over the level
+  /// (a path, a frame, bounds, an outline), drawn and handed the pointer
+  /// only while the Gizmos button shows that kind in the editor's mode.
+  /// Null for what a tool in use draws (a drag box, a brush, a ghost, the
+  /// selection's handles) and for the designer's own rulers, guides and
+  /// minimap, which are always there.
+  GizmoKind? get gizmoKind => GizmoKind.aids;
 
   /// Which scene modes it draws in. 2-D unless it says otherwise.
   jge.Dimensions get dimensions => jge.Dimensions.twoD;

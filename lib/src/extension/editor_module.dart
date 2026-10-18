@@ -12,6 +12,7 @@ import 'editor_marker.dart';
 import 'prefab_variant.dart';
 import 'viewport_handles.dart';
 import 'viewport_overlay.dart';
+import 'workspace_contributions.dart';
 import '../designer/designer_overlay.dart';
 import '../model/editor_history.dart';
 import '../designer/layer_preset.dart';
@@ -218,6 +219,12 @@ abstract class EditorModule {
   /// graph. Opened with [EditorScope.openWorkspace].
   List<WorkspaceDefinition> get workspaces => const [];
 
+  /// What it adds to windows — its own or others' (the editor's material
+  /// windows: [WorkspaceIds]): tools on their toolbars, sections in their
+  /// panels, overlays over their views. Each window builds them from the
+  /// [WorkspaceView] it hands them.
+  List<WorkspaceContribution> get workspaceContributions => const [];
+
   /// Checks this module makes of the open scene, listed in the Problems
   /// dock beside the editor's own: a level with no spawn point, say.
   List<SceneValidator> get validators => const [];
@@ -264,7 +271,8 @@ abstract class EditorModule {
   /// through while a scene of that mode is edited. A later module's wins;
   /// with none, the editor's own (`GameCameraEditorView` in 2-D,
   /// `OrbitFlyEditorView` in 3-D).
-  Map<jge.SceneMode, EditorView Function(EditorScope scope)> get viewFactories => const {};
+  Map<jge.SceneMode, EditorView Function(EditorScope scope)>
+  get viewFactories => const {};
 
   /// Icons the viewport draws at every entity of a kind, so things with
   /// nothing to draw can be found (see [EditorMarker]).

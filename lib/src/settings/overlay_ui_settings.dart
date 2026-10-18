@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
+import 'gizmo_settings.dart';
+
 /// How tightly the editor's chrome is packed: the three steps the settings
 /// dialog offers for [OverlayUiSettings.compactness].
 enum OverlayDensity { compact, standard, comfortable }
@@ -105,6 +107,7 @@ class OverlayUiSettings {
     this.backdrop,
     this.gizmoScale = 1,
     this.selectionColour,
+    this.gizmos = GizmoSettings.defaults,
     this.pauseOnError = false,
     this.hideChromeWhilePlaying = false,
     this.undoLimit = defaultUndoLimit,
@@ -152,6 +155,7 @@ class OverlayUiSettings {
       backdrop = null,
       gizmoScale = 1,
       selectionColour = null,
+      gizmos = GizmoSettings.defaults,
       pauseOnError = false,
       hideChromeWhilePlaying = false,
       undoLimit = defaultUndoLimit,
@@ -331,6 +335,14 @@ class OverlayUiSettings {
   /// The outline round what is selected; null keeps each view's own.
   final Color? selectionColour;
 
+  /// What the editor draws over the level (markers, camera frames, light
+  /// and sound reach, collider and selection outlines, a kit's paths and
+  /// bounds) in each of its modes: shown while editing, hidden in the Level
+  /// Designer and a play-test, until the Gizmos button says otherwise there.
+  /// The handles of what is selected, and what a tool in use draws, are not
+  /// gizmos and stay.
+  final GizmoSettings gizmos;
+
   // ── Play-testing ───────────────────────────────────────────────────────
 
   /// Pause the play-test the moment an error is logged.
@@ -423,6 +435,7 @@ class OverlayUiSettings {
     double? gizmoScale,
     Color? selectionColour,
     bool clearSelectionColour = false,
+    GizmoSettings? gizmos,
     bool? pauseOnError,
     bool? hideChromeWhilePlaying,
     int? undoLimit,
@@ -471,6 +484,7 @@ class OverlayUiSettings {
       selectionColour: clearSelectionColour
           ? null
           : selectionColour ?? this.selectionColour,
+      gizmos: gizmos ?? this.gizmos,
       pauseOnError: pauseOnError ?? this.pauseOnError,
       hideChromeWhilePlaying:
           hideChromeWhilePlaying ?? this.hideChromeWhilePlaying,
@@ -534,6 +548,7 @@ class OverlayUiSettings {
       other.backdrop == backdrop &&
       other.gizmoScale == gizmoScale &&
       other.selectionColour == selectionColour &&
+      other.gizmos == gizmos &&
       other.pauseOnError == pauseOnError &&
       other.hideChromeWhilePlaying == hideChromeWhilePlaying &&
       other.undoLimit == undoLimit &&
@@ -584,7 +599,14 @@ class OverlayUiSettings {
       confirmDelete,
       closePrompt,
     ),
-    Object.hash(gridColour, gridOpacity, backdrop, gizmoScale, selectionColour),
+    Object.hash(
+      gridColour,
+      gridOpacity,
+      backdrop,
+      gizmoScale,
+      selectionColour,
+      gizmos,
+    ),
     Object.hash(
       pauseOnError,
       hideChromeWhilePlaying,

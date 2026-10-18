@@ -204,6 +204,9 @@ abstract final class OverlaySettingsPrefKeys {
   static const String prefBackdrop = 'editor.viewport.backdrop';
   static const String prefGizmoScale = 'editor.viewport.gizmoScale';
   static const String prefSelectionColour = 'editor.viewport.selectionColour';
+  static const String prefGizmosEditor = 'editor.viewport.gizmos.editor';
+  static const String prefGizmosDesigner = 'editor.viewport.gizmos.designer';
+  static const String prefGizmosPlay = 'editor.viewport.gizmos.play';
 
   // Play-testing.
   static const String prefPauseOnError = 'editor.play.pauseOnError';

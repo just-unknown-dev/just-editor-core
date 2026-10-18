@@ -39,18 +39,20 @@ class EditorSnackBarStep {
   final String message;
   final bool isError;
 
-  /// How far along the task is, 0 to 1, when it knows: the bar then shows
-  /// it instead of running back and forth. A step with the same [message]
-  /// as the one before it replaces that one in the log, so a download can
-  /// report its progress without filling the log.
+  /// How far along the task is, 0 to 1, when it knows: the message then
+  /// shows a bar with the percentage. A step with the same [message] as the
+  /// one before it replaces that one in the log, so a download can report
+  /// its progress without filling the log.
   final double? progress;
 }
 
 /// Data object describing a snackbar to show.
 ///
 /// For simple fire-and-forget messages, omit [progressStream] and set
-/// [duration]. For task-tracking snackbars, provide a [progressStream] — the
-/// bar stays indeterminate until the stream closes, then the snackbar goes
+/// [duration]: they have no bar, and go when their time is up. For
+/// task-tracking snackbars, provide a [progressStream] — a spinner shows
+/// while the task runs, and a bar with the percentage once a step says how
+/// far along it is; when the stream closes the bar goes and the snackbar
 /// after a moment; one that ends in an error stays until it is dismissed.
 class EditorSnackBarEntry {
   const EditorSnackBarEntry({
@@ -78,9 +80,9 @@ class EditorSnackBarEntry {
   /// is provided.
   final Duration duration;
 
-  /// When non-null the snackbar enters progress mode: the bar is
-  /// indeterminate and each emitted [EditorSnackBarStep] is listed in a
-  /// scrollable step log.
+  /// When non-null the snackbar follows a task: each emitted
+  /// [EditorSnackBarStep] is listed in a scrollable step log, and the
+  /// progress the steps report shows as a bar with its percentage.
   final Stream<EditorSnackBarStep>? progressStream;
 }
 
@@ -110,8 +112,11 @@ class EditorSnack {
 
   bool get hasProgress => entry.progressStream != null;
 
+  /// The task is still going.
+  bool get isRunning => hasProgress && !_done;
+
   /// How far along the task is, 0 to 1, when its steps say; null while
-  /// they don't (the bar then runs back and forth).
+  /// they don't (only a spinner shows then).
   double? get progress {
     if (_done) return 1;
     for (final s in _steps.reversed) {
@@ -278,8 +283,11 @@ class EditorSnackBarController {
     }
   }
 
+  // A new list, not forceSet with the same one: a SignalBuilder compares
+  // what it is handed with what it had, and the same list looks unchanged —
+  // a task's steps and progress, and a minimise, would never be drawn.
   void _publish() {
-    if (!_disposed) snacks.forceSet(snacks.value);
+    if (!_disposed) snacks.value = List.unmodifiable(snacks.value);
   }
 
   void dispose() {
@@ -379,7 +387,12 @@ class MinimizedSnacksChip extends StatelessWidget {
         final accent = failed
             ? EditorTheme.error
             : latest.entry.type.accentColor;
-        final label = latest.entry.title ?? latest.entry.message;
+        // The latest task's percentage, when it says how far along it is.
+        final fraction = latest.isRunning ? latest.progress : null;
+        final title = latest.entry.title ?? latest.entry.message;
+        final label = fraction == null
+            ? title
+            : '$title  ${_SnackProgressBar.percentOf(fraction)}%';
         return Padding(
           padding: const EdgeInsets.only(left: 8),
           child: Tooltip(
@@ -407,6 +420,7 @@ class MinimizedSnacksChip extends StatelessWidget {
                         SizedBox.square(
                           dimension: 10,
                           child: CircularProgressIndicator(
+                            value: fraction,
                             strokeWidth: 1.5,
                             color: accent,
                           ),
@@ -473,44 +487,24 @@ class _EditorSnackBarScope extends InheritedWidget {
 
 // ── Snackbar card ─────────────────────────────────────────────────────────────
 
-class _SnackCard extends StatefulWidget {
+// A message has no bar: it goes by itself when its time is up. Only a task
+// that says how far along it is gets one, with the percentage.
+class _SnackCard extends StatelessWidget {
   const _SnackCard({super.key, required this.snack, required this.controller});
 
   final EditorSnack snack;
   final EditorSnackBarController controller;
 
-  @override
-  State<_SnackCard> createState() => _SnackCardState();
-}
-
-class _SnackCardState extends State<_SnackCard>
-    with SingleTickerProviderStateMixin {
-  // The time a message has left, drawn as the bar running down.
-  late final AnimationController _left = AnimationController(vsync: this);
-
-  @override
-  void initState() {
-    super.initState();
-    final entry = widget.snack.entry;
-    if (entry.progressStream == null && !entry.sticky) {
-      _left
-        ..duration = widget.snack.shownFor
-        ..forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _left.dispose();
-    super.dispose();
-  }
+  // Where the text starts, past the card's padding and the icon: the bar
+  // lines up with it.
+  static const double _textInset = 12 + 15 + 8;
 
   @override
   Widget build(BuildContext context) {
-    final snack = widget.snack;
     final entry = snack.entry;
     final steps = snack.steps;
     final finished = snack.hasProgress && snack.isDone;
+    final fraction = snack.isRunning ? snack.progress : null;
     final accent = snack.failed
         ? EditorTheme.error
         : finished
@@ -558,7 +552,18 @@ class _SnackCardState extends State<_SnackCard>
                     children: <Widget>[
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: Icon(icon, size: 15, color: accent),
+                        child: snack.isRunning
+                            ? SizedBox.square(
+                                dimension: 15,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(1.5),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: accent,
+                                  ),
+                                ),
+                              )
+                            : Icon(icon, size: 15, color: accent),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -605,28 +610,23 @@ class _SnackCardState extends State<_SnackCard>
                       EditorIconButton(
                         icon: Icons.keyboard_arrow_down_rounded,
                         tooltip: 'Minimise to the status bar',
-                        onTap: () => widget.controller.minimize(snack),
+                        onTap: () => controller.minimize(snack),
                       ),
                       EditorIconButton(
                         icon: Icons.close_rounded,
                         tooltip: 'Dismiss',
-                        onTap: () => widget.controller.dismiss(snack),
+                        onTap: () => controller.dismiss(snack),
                       ),
                     ],
                   ),
                 ),
-                if (snack.hasProgress)
-                  _SnackProgressBar(
-                    color: accent,
-                    value: snack.progress,
-                    isIndeterminate: snack.progress == null,
-                  )
-                else if (!entry.sticky)
-                  AnimatedBuilder(
-                    animation: _left,
-                    builder: (context, _) => _SnackProgressBar(
+                if (fraction != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(_textInset, 0, 12, 8),
+                    child: _SnackProgressBar(
                       color: accent,
-                      value: 1 - _left.value,
+                      value: fraction,
+                      label: entry.title ?? entry.message,
                     ),
                   ),
                 if (steps.isNotEmpty)
@@ -652,24 +652,61 @@ class _SnackCardState extends State<_SnackCard>
   }
 }
 
+/// How far a running task has got: a bar, and the percentage beside it.
 class _SnackProgressBar extends StatelessWidget {
   const _SnackProgressBar({
     required this.color,
-    this.value,
-    this.isIndeterminate = false,
+    required this.value,
+    required this.label,
   });
 
   final Color color;
-  final double? value;
-  final bool isIndeterminate;
+
+  /// 0 to 1.
+  final double value;
+
+  /// What the bar is read out as: the task's title.
+  final String label;
+
+  /// [value] as a whole percentage, rounded down, so 100 means all of it.
+  static int percentOf(double value) => (value.clamp(0.0, 1.0) * 100).floor();
 
   @override
   Widget build(BuildContext context) {
-    return LinearProgressIndicator(
-      value: isIndeterminate ? null : (value ?? 1.0),
-      minHeight: 2,
-      backgroundColor: Colors.white.withValues(alpha: 0.06),
-      valueColor: AlwaysStoppedAnimation<Color>(color),
+    final percent = '${percentOf(value)}%';
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: value.clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.06),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              semanticsLabel: label,
+              semanticsValue: percent,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        ExcludeSemantics(
+          child: SizedBox(
+            width: 32,
+            child: Text(
+              percent,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: EditorTheme.textPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.0,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

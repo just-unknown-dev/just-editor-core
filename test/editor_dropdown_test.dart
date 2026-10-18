@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_editor_core/host.dart';
 
@@ -179,6 +180,100 @@ void main() {
     expect(size.height, 22);
     expect(size.width, lessThan(120));
     expect(find.text('clip'), findsOneWidget);
+  });
+
+  testWidgets('a narrow field opens a list wide enough for every name and '
+      'what it does', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 140,
+              child: EditorDropdown<String>(
+                value: null,
+                hint: 'Start from…',
+                options: const [
+                  // The test's font draws every letter a whole em wide:
+                  // this one fits the widest list there is, the next does
+                  // not.
+                  EditorDropdownOption(
+                    value: 'hit',
+                    label: 'Hit flash',
+                    detail: 'White all over when hit',
+                  ),
+                  EditorDropdownOption(
+                    value: 'long',
+                    label: 'Long',
+                    detail:
+                        'Far more to say about it than any list could ever '
+                        'show on one line, however wide it opens',
+                  ),
+                ],
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Start from…'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+    final name = tester.getRect(find.text('Hit flash'));
+    final detail = tester.getRect(find.text('White all over when hit'));
+    expect(name.width, greaterThan(30), reason: 'the name is not squeezed');
+    expect(detail.left, greaterThan(name.right), reason: 'after the name');
+    expect(detail.right, greaterThan(140), reason: 'wider than the field');
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.text('White all over when hit'),
+    );
+    expect(paragraph.didExceedMaxLines, isFalse, reason: 'shown whole');
+    // Too long for any list: cut short, its name whole beside it.
+    expect(
+      tester.getRect(find.text('Long')).width,
+      greaterThan(30),
+      reason: 'the name is not squeezed',
+    );
+    final long = tester.renderObject<RenderParagraph>(
+      find.textContaining('Far more to say'),
+    );
+    expect(long.didExceedMaxLines, isTrue, reason: 'cut, not overflowing');
+  });
+
+  testWidgets('a list opened at a set width cuts a long name short rather '
+      'than push it past the edge', (tester) async {
+    await _pump(
+      tester,
+      Builder(
+        builder: (context) => TextButton(
+          onPressed: () => openEditorDropdownMenu<String>(
+            context,
+            width: 160,
+            options: const [
+              EditorDropdownOption(
+                value: 'long',
+                label: 'a_tag_with_a_really_quite_long_name',
+                detail: 'on 3',
+              ),
+            ],
+          ),
+          child: const Text('Add tag…'),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Add tag…'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+    final name = tester.renderObject<RenderParagraph>(
+      find.text('a_tag_with_a_really_quite_long_name'),
+    );
+    expect(name.didExceedMaxLines, isTrue, reason: 'cut short');
+    expect(find.text('on 3'), findsOneWidget);
   });
 
   test('no stock Material dropdown is left in the editor', () {

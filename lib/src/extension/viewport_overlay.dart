@@ -2,10 +2,11 @@ import 'package:flutter/painting.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
 import '../scope/editor_scope.dart';
+import '../settings/gizmo_settings.dart';
 import '../view/editor_view.dart';
 
-/// Something a module draws over the editor's viewport while authoring,
-/// with the Level Designer open or not: a light's reach, a camera's
+/// Something a module draws over the editor's viewport, with the Level
+/// Designer open or not, as one of its gizmos ([gizmoKind]): a light's reach, a camera's
 /// frustum, a trigger volume in space.
 ///
 /// Unlike a designer overlay it needs no designer, so it is how a 3-D
@@ -20,6 +21,10 @@ abstract class ViewportOverlay {
 
   /// Which scene modes it draws in.
   jge.Dimensions get dimensions => jge.Dimensions.both;
+
+  /// Which kind of the editor's gizmos it is: drawn only while the Gizmos
+  /// button shows that kind in the editor's mode.
+  GizmoKind get gizmoKind => GizmoKind.aids;
 
   /// Paint order among overlays: lower first (further back).
   int get order => 0;
@@ -56,9 +61,10 @@ final class ViewportOverlayContext {
   /// The world being edited.
   jge.World get world => scope.world;
 
-  /// Whether [entity] is drawn in the viewport — not hidden by its eye or
-  /// its layer. An overlay about an entity draws nothing for one that is
-  /// not.
+  /// Whether [entity]'s gizmos may be drawn: not hidden by its eye or its
+  /// layer. In the Level Designer that takes in what is off the Level Map
+  /// too, since its gizmos are drawn there only once asked for. An overlay
+  /// about an entity draws nothing for one that is not.
   bool isShown(jge.Entity entity) => _isShown(entity);
 
   /// Whether [entity] is part of the selection.

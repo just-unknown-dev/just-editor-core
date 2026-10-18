@@ -59,6 +59,14 @@ class EditorDropdown<T> extends StatelessWidget {
   /// The list scrolls past this.
   static const double maxMenuHeight = 264;
 
+  /// The widest an entry's name is before it is cut short, when a detail
+  /// follows it.
+  static const double maxLabelWidth = 200;
+
+  /// The widest the list opens to fit its entries' names and details; a
+  /// longer detail is cut short.
+  static const double maxMenuWidth = 480;
+
   /// The selected value, or null to show [hint].
   final T? value;
   final List<EditorDropdownOption<T>> options;
@@ -216,7 +224,21 @@ Future<EditorChoice<T>?> openEditorDropdownMenu<T>(
     field.localToGlobal(field.size.bottomLeft(Offset.zero), ancestor: overlay),
     field.localToGlobal(field.size.bottomRight(Offset.zero), ancestor: overlay),
   ).translate(0, gap);
-  final w = width ?? math.max(field.size.width, searchable ? 200.0 : 120.0);
+  // As wide as the field, or as its entries' names and details need — a
+  // preset and what it does — within the window.
+  final w =
+      width ??
+      math.min(
+        math.max(
+          math.max(field.size.width, searchable ? 200.0 : 120.0),
+          _naturalWidth(
+            options,
+            DefaultTextStyle.of(anchor).style.copyWith(fontSize: fontSize),
+            MediaQuery.textScalerOf(anchor),
+          ),
+        ),
+        math.max(120.0, overlay.size.width - 16),
+      );
   return showMenu<EditorChoice<T>>(
     context: anchor,
     position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
@@ -239,6 +261,54 @@ Future<EditorChoice<T>?> openEditorDropdownMenu<T>(
       ),
     ],
   );
+}
+
+/// The space between an entry's name and its detail.
+const double _detailGap = 10;
+
+/// How wide [options] want the list so that every name (up to
+/// [EditorDropdown.maxLabelWidth]) and detail shows whole, with the tick's
+/// column and the padding beside them; [EditorDropdown.maxMenuWidth] at
+/// most, and 0 when none has a detail. Measured in [style], the field's.
+double _naturalWidth<T>(
+  List<EditorDropdownOption<T>> options,
+  TextStyle style,
+  TextScaler scaler,
+) {
+  final fontSize = style.fontSize ?? 11;
+  double widthOf(String text, double size) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: style.copyWith(fontSize: size),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  var widest = 0.0;
+  for (final option in options) {
+    final detail = option.detail;
+    if (detail == null || detail.isEmpty) continue;
+    final name = math.min(
+      widthOf(option.label, fontSize),
+      EditorDropdown.maxLabelWidth,
+    );
+    final dot = option.color == null ? 0 : 14;
+    widest = math.max(
+      widest,
+      dot + name + _detailGap + widthOf(detail, fontSize - 1),
+    );
+  }
+  if (widest == 0) return 0;
+  // The tick's column, the padding either side, and room for a font a
+  // little wider than the field's.
+  return math.min(widest + 16 + 6 + 10 + 12, EditorDropdown.maxMenuWidth);
 }
 
 /// What the menu pops with. A wrapper, because a popup treats a null result
@@ -390,6 +460,22 @@ class _MenuBodyState<T> extends State<_MenuBody<T>> {
     ),
   );
 
+  Widget _label(String label, {required bool selected, required bool muted}) =>
+      Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: muted
+              ? EditorTheme.textSecondary
+              : selected
+              ? EditorTheme.textBright
+              : EditorTheme.textPrimary,
+          fontSize: widget.fontSize,
+          fontStyle: muted ? FontStyle.italic : FontStyle.normal,
+        ),
+      );
+
   Widget _item(
     String label, {
     required bool selected,
@@ -404,43 +490,56 @@ class _MenuBodyState<T> extends State<_MenuBody<T>> {
       height: EditorDropdown.itemHeight,
       color: selected ? EditorTheme.selectionBg : null,
       padding: const EdgeInsets.only(left: 6, right: 10),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 16,
-            child: selected
-                ? Icon(Icons.check, size: 12, color: EditorTheme.primary)
-                : null,
-          ),
-          if (color != null) ...[_Dot(color), const SizedBox(width: 6)],
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: muted
-                    ? EditorTheme.textSecondary
-                    : selected
-                    ? EditorTheme.textBright
-                    : EditorTheme.textPrimary,
-                fontSize: widget.fontSize,
-                fontStyle: muted ? FontStyle.italic : FontStyle.normal,
-              ),
+      child: LayoutBuilder(
+        builder: (context, box) => Row(
+          children: [
+            SizedBox(
+              width: 16,
+              child: selected
+                  ? Icon(Icons.check, size: 12, color: EditorTheme.primary)
+                  : null,
             ),
-          ),
-          if (detail != null && detail.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              detail,
-              maxLines: 1,
-              style: TextStyle(
-                color: EditorTheme.textMuted,
-                fontSize: widget.fontSize - 1,
+            if (color != null) ...[_Dot(color), const SizedBox(width: 6)],
+            if (detail == null || detail.isEmpty)
+              Expanded(
+                child: _label(label, selected: selected, muted: muted),
+              )
+            else ...[
+              // The name first, whole up to a point; the detail takes what
+              // is left, cut short rather than squeezing the name out. In a
+              // list narrower than that — one opened at a set width — the
+              // name is cut short too, never pushed past the edge.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: math.max(
+                    0.0,
+                    math.min(
+                      EditorDropdown.maxLabelWidth,
+                      box.maxWidth -
+                          16 -
+                          (color == null ? 0 : 14) -
+                          _detailGap,
+                    ),
+                  ),
+                ),
+                child: _label(label, selected: selected, muted: muted),
               ),
-            ),
+              const SizedBox(width: _detailGap),
+              Expanded(
+                child: Text(
+                  detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: EditorTheme.textMuted,
+                    fontSize: widget.fontSize - 1,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     ),
   );

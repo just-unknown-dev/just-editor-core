@@ -12,6 +12,7 @@ dependencies:
   flutter:
     sdk: flutter
   just_game_engine: ^2.0.0-dev.2
+  just_game_engine_formats: ^0.2.0
   just_signals: ^1.0.2
   just_di: ^1.0.0
   just_debugger: ^0.0.1

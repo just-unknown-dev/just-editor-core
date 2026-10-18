@@ -44,6 +44,7 @@ import '../extension/editor_marker.dart';
 import '../extension/prefab_variant.dart';
 import '../extension/viewport_handles.dart';
 import '../extension/viewport_overlay.dart';
+import '../extension/workspace_contributions.dart';
 
 /// Everything one editor owns: its registries, services and state, in a
 /// `just_di` container that is disposed with it.
@@ -373,11 +374,23 @@ class EditorScope {
   List<EntityRayTest> get pickTests => List.unmodifiable(_pickTests);
 
   final List<ViewportOverlay> _viewportOverlays = [];
+  final List<WorkspaceContribution> _workspaceContributions = [];
+
+  /// What the modules add to the window [workspaceId] of kind [T] — its
+  /// toolbar's tools, its panel's sections, its view's overlays — in
+  /// order.
+  List<T> workspaceContributionsFor<T extends WorkspaceContribution>(
+    String workspaceId,
+  ) => [
+    for (final c in _workspaceContributions)
+      if (c is T && c.workspaceId == workspaceId) c,
+  ];
   final List<ViewportHandles> _viewportHandles = [];
   final List<PrefabVariant> _prefabVariants = [];
 
   /// What lets the author drag points of the selection in the viewport.
-  List<ViewportHandles> get viewportHandles => List.unmodifiable(_viewportHandles);
+  List<ViewportHandles> get viewportHandles =>
+      List.unmodifiable(_viewportHandles);
 
   /// The other ways the prefabs offered in space are offered too.
   List<PrefabVariant> get prefabVariants => List.unmodifiable(_prefabVariants);
@@ -893,6 +906,7 @@ class EditorScope {
     _pickTests.clear();
     _prefabPictures.clear();
     _viewportOverlays.clear();
+    _workspaceContributions.clear();
     _viewportHandles.clear();
     _prefabVariants.clear();
     final kinds = AssetKinds();
@@ -923,6 +937,7 @@ class EditorScope {
       _prefabPictures.addAll(module.prefabPictures);
       module.assetKinds.forEach(kinds.add);
       _viewportOverlays.addAll(module.viewportOverlays);
+      _workspaceContributions.addAll(module.workspaceContributions);
       _viewportHandles.addAll(module.viewportHandles);
       _prefabVariants.addAll(module.prefabVariants);
       module.themePresets.forEach(theme.register);
@@ -932,6 +947,7 @@ class EditorScope {
     }
     _registered.retainWhere(modules.withBuiltIns.contains);
     _viewportOverlays.sort((a, b) => a.order.compareTo(b.order));
+    _workspaceContributions.sort((a, b) => a.order.compareTo(b.order));
     // What a file is, for the browser and drops: the editor's kinds and the
     // modules'.
     AssetKinds.active = kinds;

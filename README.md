@@ -34,7 +34,7 @@ Pass it to the editor with `JustGameEditorPlugin.register(modules: [MyGameModule
 
 | Area | What |
 |------|------|
-| The contract | `EditorModule` and its contributions: prefabs, tools, overlays, snap providers, docks, workspaces, toolbar buttons, settings sections, inspector sections, field editors and accessories, scene-tree actions, asset kinds and actions, markers, views, checks |
+| The contract | `EditorModule` and its contributions: prefabs, tools, overlays, snap providers, docks, workspaces, toolbar buttons, settings sections, inspector sections, field editors and accessories, scene-tree actions, asset kinds and actions, markers, views, checks; tools, sections and overlays added to another's window (`workspaceContributions`, by `WorkspaceIds`) |
 | The scope | `EditorScope`: one editor's registries and services in a `just_di` container — the scene state, undo, the codec and scene store, preferences, the log, the project's tags, physics layers and colours |
 | Undo | `EditorHistory`, `EditorCommand`, the entity and hierarchy commands, `ComponentEdit` |
 | The inspector | `buildComponentSections`, the field rows, `FieldEditorBuilder`, `ComponentEditorExtras`, `CollectionEditor`, `AddComponentPicker` |

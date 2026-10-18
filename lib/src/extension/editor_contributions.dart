@@ -252,8 +252,22 @@ class AssetAction {
   final void Function(EditorScope scope, String path) run;
 }
 
-/// A button a module adds to the play-controls toolbar, after the built-in
-/// Play, Pause, Stop and Level Designer buttons.
+/// Where a [ToolbarButton] stands over the viewport.
+enum ToolbarSlot {
+  /// On the play toolbar at the top left, in the modules' frame after the
+  /// built-in Play, Pause, Stop and Level Designer buttons.
+  playToolbar,
+
+  /// In the column down the right, in a frame of its own under the
+  /// transform tools (Q, W, E, R): a feature of the editor itself rather
+  /// than a module's tool, such as the Asset Store. Not on the small bar a
+  /// play-test shows with the editor stepped aside.
+  toolColumn,
+}
+
+/// A button a module adds over the viewport: on the play toolbar after the
+/// built-in Play, Pause, Stop and Level Designer buttons, or in the column
+/// down the right (see [slot]).
 class ToolbarButton {
   const ToolbarButton({
     required this.id,
@@ -261,6 +275,7 @@ class ToolbarButton {
     required this.tooltip,
     required this.onPressed,
     this.order = 100,
+    this.slot = ToolbarSlot.playToolbar,
     this.isEnabled,
     this.isActive,
   });
@@ -269,6 +284,10 @@ class ToolbarButton {
   final IconData icon;
   final String tooltip;
   final int order;
+
+  /// Where it stands: with the modules' tools on the play toolbar, or in
+  /// the column down the right under the transform tools.
+  final ToolbarSlot slot;
   final bool Function(EditorScope scope)? isEnabled;
   final bool Function(EditorScope scope)? isActive;
   final void Function(EditorScope scope) onPressed;

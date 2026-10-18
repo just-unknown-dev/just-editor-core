@@ -56,36 +56,99 @@ void main() {
     expect(c.snacks.value, isEmpty);
   });
 
-  testWidgets('the layer shows them, and dismisses one', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: EditorMessenger(
-          child: Builder(
-            builder: (context) => Scaffold(
-              body: Stack(
-                children: [
-                  Positioned(
-                    right: 8,
-                    bottom: 8,
-                    child: Builder(
-                      builder: (context) {
-                        c = EditorMessenger.of(context);
-                        return const EditorSnackBarLayer();
-                      },
-                    ),
+  // The layer in a corner, with [c] its controller.
+  Future<void> mountLayer(WidgetTester tester) => tester.pumpWidget(
+    MaterialApp(
+      home: EditorMessenger(
+        child: Builder(
+          builder: (context) => Scaffold(
+            body: Stack(
+              children: [
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Builder(
+                    builder: (context) {
+                      c = EditorMessenger.of(context);
+                      return const EditorSnackBarLayer();
+                    },
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
       ),
-    );
+    ),
+  );
+
+  testWidgets('the layer shows them, and dismisses one', (tester) async {
+    await mountLayer(tester);
     c.showSnackBar(const EditorSnackBarEntry(title: 'Saved', message: 'All'));
     await tester.pump();
     expect(find.text('Saved'), findsOneWidget);
     await tester.tap(find.byTooltip('Dismiss'));
     await tester.pump();
     expect(find.text('Saved'), findsNothing);
+  });
+
+  testWidgets('a message has no bar; it goes when its time is up', (
+    tester,
+  ) async {
+    await mountLayer(tester);
+    c.showSnackBar(const EditorSnackBarEntry(message: '7 lines copied'));
+    await tester.pump();
+    expect(find.text('7 lines copied'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.text('7 lines copied'), findsNothing);
+  });
+
+  testWidgets('a task shows a bar with its percentage only while it counts', (
+    tester,
+  ) async {
+    await mountLayer(tester);
+    final task = StreamController<EditorSnackBarStep>();
+    c.showSnackBar(
+      EditorSnackBarEntry(message: 'Installing', progressStream: task.stream),
+    );
+    await tester.pump();
+    // Running, but not saying how far: a spinner, no bar.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    task.add(const EditorSnackBarStep(message: 'Downloading', progress: 0.42));
+    await tester.pump();
+    final bar = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(bar.value, 0.42);
+    expect(find.text('42%'), findsOneWidget);
+
+    // Done: the bar goes, and the message after a moment.
+    task.add(const EditorSnackBarStep(message: 'Done'));
+    await task.close();
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('42%'), findsNothing);
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.text('Installing'), findsNothing);
+  });
+
+  testWidgets('minimising a task takes its card away at once', (tester) async {
+    await mountLayer(tester);
+    final task = StreamController<EditorSnackBarStep>();
+    c.showSnackBar(
+      EditorSnackBarEntry(message: 'Installing', progressStream: task.stream),
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Minimise to the status bar'));
+    await tester.pump();
+    expect(find.text('Installing'), findsNothing);
+    expect(c.minimized, hasLength(1));
+    await task.close();
+    await tester.pump(const Duration(seconds: 10));
   });
 }

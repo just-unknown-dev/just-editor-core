@@ -25,6 +25,7 @@ final class AssetKind {
     this.filterable = false,
     this.preview,
     this.drop,
+    this.dropsIn = jge.Dimensions.both,
   });
 
   /// Names it: `image`, `model`.
@@ -45,8 +46,8 @@ final class AssetKind {
   /// Whether the browser offers it as a filter.
   final bool filterable;
 
-  /// Builds a picture of [entry] [size] pixels square for the browser, or
-  /// null to show the [icon]. A 3-D model's renders it.
+  /// Builds a picture of `entry`, `size` logical pixels square, for the
+  /// browser, or null to show the [icon]. A 3-D model's renders it.
   final Widget? Function(
     BuildContext context,
     AssetIndex index,
@@ -59,6 +60,14 @@ final class AssetKind {
   /// dropped there. See [AssetDrop].
   final jge.Entity? Function(AssetDrop drop)? drop;
 
+  /// The scenes [drop] makes something in: in a scene of another mode the
+  /// viewport turns the file away, saying where it goes. A model's is 3-D.
+  final jge.Dimensions dropsIn;
+
+  /// Whether one dropped on the viewport of a scene of [mode] makes
+  /// something.
+  bool dropsInto(jge.SceneMode mode) => drop != null && dropsIn.allows(mode);
+
   /// Whether [path] (any case) is one of these.
   bool matches(String path) {
     final p = path.toLowerCase();
@@ -68,12 +77,16 @@ final class AssetKind {
     return false;
   }
 
+  /// A folder: what [AssetKinds.of] says of any directory, whatever its
+  /// name.
   static const AssetKind folder = AssetKind(
     'folder',
     'Folders',
     icon: Icons.folder_rounded,
     color: Color(0xFFFFC86B),
   );
+
+  /// A picture: `.png`, `.jpg`, `.webp`, `.gif`, `.bmp`.
   static const AssetKind image = AssetKind(
     'image',
     'Images',
@@ -82,6 +95,8 @@ final class AssetKind {
     endings: ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'],
     filterable: true,
   );
+
+  /// A sprite project: `.jsprite`, or an Aseprite file.
   static const AssetKind sprite = AssetKind(
     'sprite',
     'Sprites',
@@ -90,6 +105,8 @@ final class AssetKind {
     endings: ['.jsprite', '.aseprite', '.ase'],
     filterable: true,
   );
+
+  /// A scene the editor saves: `.scene.json`.
   static const AssetKind scene = AssetKind(
     'scene',
     'Scenes',
@@ -98,6 +115,8 @@ final class AssetKind {
     endings: ['.scene.json'],
     filterable: true,
   );
+
+  /// An animator graph: `.animator.json`.
   static const AssetKind animator = AssetKind(
     'animator',
     'Animators',
@@ -105,6 +124,8 @@ final class AssetKind {
     color: Color(0xFFFFCA28),
     endings: ['.animator.json'],
   );
+
+  /// A tileset the editor saves: `.tileset.json`.
   static const AssetKind tileset = AssetKind(
     'tileset',
     'Tilesets',
@@ -114,7 +135,7 @@ final class AssetKind {
     filterable: true,
   );
 
-  /// A map, of either name: `.tilemap.json` from before the rename.
+  /// A level map the editor saves: `.map.json`, or `.tilemap.json`.
   static const AssetKind levelMap = AssetKind(
     'levelMap',
     'Maps',
@@ -123,6 +144,8 @@ final class AssetKind {
     endings: ['.map.json', '.tilemap.json'],
     filterable: true,
   );
+
+  /// A Tiled map or tileset: `.tmx`, `.tmj`, `.tsx`, `.tsj`.
   static const AssetKind tiled = AssetKind(
     'tiled',
     'Tiled files',
@@ -130,12 +153,17 @@ final class AssetKind {
     color: Color(0xFF80CBC4),
     endings: ['.tmx', '.tmj', '.tsx', '.tsj'],
   );
+
+  /// Other data: `.json`, `.yaml`, `.txt`, `.csv`.
   static const AssetKind data = AssetKind(
     'data',
     'Data',
     icon: Icons.data_object_rounded,
     endings: ['.json', '.yaml', '.yml', '.txt', '.csv'],
   );
+
+  /// A sound: `.wav`, `.mp3`, `.ogg`, `.flac`, `.m4a`. Dropped on the
+  /// viewport it makes a looping source of it.
   static const AssetKind audio = AssetKind(
     'audio',
     'Audio',
@@ -146,12 +174,16 @@ final class AssetKind {
     // Dropped on the viewport: a looping source of it (3-D in a 3-D scene).
     drop: AudioDrop.place,
   );
+
+  /// A font: `.ttf`, `.otf`.
   static const AssetKind font = AssetKind(
     'font',
     'Fonts',
     icon: Icons.font_download_outlined,
     endings: ['.ttf', '.otf'],
   );
+
+  /// Anything no other kind matches.
   static const AssetKind other = AssetKind(
     'other',
     'Other',
@@ -175,10 +207,6 @@ final class AssetKind {
     other,
   ];
 
-  /// What [path] is, by the kinds the editor knows now ([AssetKinds.active]).
-  static AssetKind of(String path, {bool isDirectory = false}) =>
-      AssetKinds.active.of(path, isDirectory: isDirectory);
-
   @override
   String toString() => 'AssetKind.$id';
 }
@@ -191,10 +219,6 @@ final class AssetKinds {
     added.forEach(add);
   }
 
-  /// The kinds the editor open now knows; its scope sets it as modules come
-  /// and go.
-  static AssetKinds active = AssetKinds();
-
   final List<AssetKind> _added = [];
 
   /// Adds [kind], in place of one with its id.
@@ -202,6 +226,13 @@ final class AssetKinds {
     _added
       ..removeWhere((k) => k.id == kind.id)
       ..add(kind);
+  }
+
+  /// Puts [added] in place of every kind added so far: an editor's scope
+  /// does, each time it rebuilds its registries from its modules.
+  void replaceAll(Iterable<AssetKind> added) {
+    _added.clear();
+    added.forEach(add);
   }
 
   /// Every kind: the added ones, then the editor's own.
@@ -221,6 +252,12 @@ final class AssetKinds {
     for (final kind in _added.reversed) {
       if (kind.matches(path)) return kind;
     }
+    return editorKindOf(path);
+  }
+
+  /// What [path] is by the editor's own kinds alone ([AssetKind.values]).
+  static AssetKind editorKindOf(String path, {bool isDirectory = false}) {
+    if (isDirectory) return AssetKind.folder;
     for (final kind in AssetKind.values) {
       if (kind.matches(path)) return kind;
     }
@@ -261,10 +298,9 @@ final class AssetDrop {
   /// Makes an entity of [components] at [at] (unless they bring their own
   /// transform), named after the file unless [name] is given, selected, as
   /// one undo step.
-  jge.Entity place(List<jge.Component> components, {String? name}) =>
-      _place([
-        if (!components.any((c) => c is jge.TransformComponent))
-          jge.TransformComponent(position: jge.Vector3.copy(at)),
-        ...components,
-      ], name);
+  jge.Entity place(List<jge.Component> components, {String? name}) => _place([
+    if (!components.any((c) => c is jge.TransformComponent))
+      jge.TransformComponent(position: jge.Vector3.copy(at)),
+    ...components,
+  ], name);
 }

@@ -38,12 +38,15 @@ final class HandleDragSession {
     var bestScore = double.infinity;
     for (var i = 0; i < handles.length; i++) {
       final at = view.isPlanar
-          ? view.worldToScreen(Offset(handles[i].position.x, handles[i].position.y))
+          ? view.worldToScreen(
+              Offset(handles[i].position.x, handles[i].position.y),
+            )
           : view.projectToScreen(handles[i].position);
       if (at == null) continue;
       final distance = (at - screen).distance;
       if (distance > reach) continue;
-      final score = distance + (handles[i].style == ViewportHandleStyle.add ? reach : 0);
+      final score =
+          distance + (handles[i].style == ViewportHandleStyle.add ? reach : 0);
       if (score < bestScore) {
         bestScore = score;
         best = i;
@@ -53,8 +56,16 @@ final class HandleDragSession {
   }
 
   /// Takes hold of the handle among [handles] under [screen], if there is
-  /// one; [alt] when Alt is held.
-  bool down(Offset screen, List<ViewportHandle> handles, EditorView view, {bool alt = false}) {
+  /// one; [alt] when Alt is held. A drag still held — its release lost to
+  /// a window that lost the focus, or a second pointer — is ended first,
+  /// so what it changed is its own undo step.
+  bool down(
+    Offset screen,
+    List<ViewportHandle> handles,
+    EditorView view, {
+    bool alt = false,
+  }) {
+    if (_active case final held?) _finish(held);
     final index = hit(screen, handles, view);
     if (index < 0) return false;
     _active = handles[index];
@@ -71,13 +82,23 @@ final class HandleDragSession {
 
   /// The pointer moved to [screen]: the held handle follows (snapping when
   /// [snap], to [grid]).
-  void move(Offset screen, EditorView view, {bool snap = false, double grid = 1}) {
+  void move(
+    Offset screen,
+    EditorView view, {
+    bool snap = false,
+    double grid = 1,
+  }) {
     final handle = _active;
     if (handle == null) return;
     if (!_moved && (screen - _down).distance < 3) return;
     _moved = true;
     handle.onDrag(
-      HandleDrag(ray: view.screenToRay(screen), start: handle.position, snap: snap, grid: grid),
+      HandleDrag(
+        ray: view.screenToRay(screen),
+        start: handle.position,
+        snap: snap,
+        grid: grid,
+      ),
     );
     scope.sceneState.refresh();
   }
@@ -102,6 +123,8 @@ final class HandleDragSession {
     final edit = _edit;
     _edit = null;
     final definition = scope.definitions.definitionFor(handle.component);
-    edit?.commit('Edit ${definition?.hints.name ?? definition?.type ?? 'component'}');
+    edit?.commit(
+      'Edit ${definition?.hints.name ?? definition?.type ?? 'component'}',
+    );
   }
 }

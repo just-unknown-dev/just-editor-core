@@ -13,16 +13,24 @@ import '../look/editor_metrics.dart';
 import 'scene_tree_model.dart';
 
 /// Where a dragged row would land relative to the one under it.
-enum DropZone { above, onto, below }
+enum DropZone {
+  /// Just before it, beside it under the same parent.
+  above,
 
-/// How near a row's edge a drop has to be to mean "between these two"
-/// rather than "inside this one".
+  /// Inside it, as one of its children.
+  onto,
+
+  /// Just after it, beside it under the same parent.
+  below,
+}
+
+/// How near a row's edge a drop has to be, in logical pixels, to mean
+/// "between these two" rather than "inside this one"; never more than a
+/// third of the row ([dropZoneFor]).
 ///
 /// A few pixels, not a share of the row: dropping something *into* a
-/// container is the common move and has to be the easy one. A band that
-/// was a share of the row left barely a third of it meaning what the whole
-/// row plainly looks like it means. Four, not five, because these rows are
-/// 22 pixels tall and five each way took nearly half of one.
+/// container is the common move and has to be the easy one, so nearly the
+/// whole row means what it plainly looks like it means.
 const double kTreeDropEdge = 4;
 
 /// What a drop [dy] pixels down a row [height] tall means.
@@ -33,6 +41,10 @@ DropZone dropZoneFor(double dy, double height) {
   return DropZone.onto;
 }
 
+/// An entity's row in the scene tree: its on-in-the-game box, the indent
+/// and chevron, its icon and name (or the rename box), any [trailing]
+/// badges, and its mark, eye, pin and menu buttons. Each button shows
+/// only when its callback is given.
 class SceneTreeRowTile extends StatelessWidget {
   const SceneTreeRowTile({
     super.key,
@@ -60,8 +72,13 @@ class SceneTreeRowTile extends StatelessWidget {
     this.trailing = const [],
   });
 
+  /// What the row shows: the entity, its depth, whether it is open.
   final TreeRow row;
+
+  /// Whether the entity is the selection, the one the inspector shows.
   final bool isSelected;
+
+  /// Whether the entity is one of several selected together.
   final bool isMultiSelected;
 
   /// Opens or shuts it; true when Alt was held, meaning the whole subtree.
@@ -79,9 +96,17 @@ class SceneTreeRowTile extends StatelessWidget {
   /// no telling what the keys are about to act on.
   final bool hasKeyboardFocus;
 
+  /// Whether the name is shown as an [EntityRenameBox] being typed in.
   final bool isRenaming;
+
+  /// Why the name last typed was refused, shown on the rename box; null
+  /// while there is nothing wrong.
   final String? renameError;
+
+  /// Called with the name as typed when the rename box takes it.
   final void Function(String name)? onCommitRename;
+
+  /// Called when Escape throws the typed name away.
   final VoidCallback? onCancelRename;
 
   /// Hidden in the viewport — the editor's own business, which the row
@@ -110,10 +135,15 @@ class SceneTreeRowTile extends StatelessWidget {
   /// nothing about it is saved and the game never sees it.
   final VoidCallback? onToggleHidden;
 
+  /// Pins the inspector to this entity, or unpins it ([isPinned]).
   final VoidCallback? onTogglePinned;
 
-  /// Opens the swatches, and the row's menu, at the button pressed.
+  /// Opens the colour swatches at `at`, the global position just below
+  /// the mark button.
   final void Function(Offset at)? onPickColor;
+
+  /// Opens the row's menu at `at`, the global position just below its
+  /// menu button.
   final void Function(Offset at)? onShowMenu;
 
   /// Where a drag hovering over this row would drop, or null when none is.
@@ -122,6 +152,7 @@ class SceneTreeRowTile extends StatelessWidget {
   /// Badges and buttons at the right-hand end.
   final List<Widget> trailing;
 
+  /// The entity the row is for ([TreeRow.entity]).
   jge.Entity get entity => row.entity;
 
   @override
@@ -372,9 +403,18 @@ class EntityRenameBox extends StatefulWidget {
     this.onCancel,
   });
 
+  /// The name the box opens with, selected whole.
   final String initial;
+
+  /// Why the name typed was refused: the box turns red, with this as its
+  /// tooltip, and stays open for another try. Null while it will do.
   final String? error;
+
+  /// Called with the text as typed on Enter or when the box loses focus,
+  /// once per try.
   final void Function(String name)? onCommit;
+
+  /// Called when Escape throws the typing away.
   final VoidCallback? onCancel;
 
   @override
@@ -405,6 +445,15 @@ class _EntityRenameBoxState extends State<EntityRenameBox> {
   }
 
   @override
+  void didUpdateWidget(EntityRenameBox old) {
+    super.didUpdateWidget(old);
+    // Still open, with a reason: the name was refused. The next Enter or
+    // click away is a new try — without this the box ignored both and only
+    // Escape got out of it.
+    if (widget.error != null) _done = false;
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     _focus.dispose();
@@ -412,8 +461,8 @@ class _EntityRenameBoxState extends State<EntityRenameBox> {
     super.dispose();
   }
 
-  /// Takes the name, once. Losing focus and pressing Enter can both
-  /// happen for one rename, and it must not be applied twice.
+  /// Takes the name, once per try. Losing focus and pressing Enter can
+  /// both happen for one rename, and it must not be applied twice.
   void _commit() {
     if (_done) return;
     _done = true;
@@ -509,9 +558,17 @@ class SceneTreeRowButton extends StatelessWidget {
     this.onDown,
   });
 
+  /// The button's face, 13 logical pixels.
   final IconData icon;
+
+  /// Shown when the pointer rests on it: what pressing it does.
   final String tooltip;
+
+  /// Called on a click, or on Enter or Space while it has focus.
   final VoidCallback onPressed;
+
+  /// Drawn muted rather than bright: a toggle that is off, a button that
+  /// should not draw the eye.
   final bool faded;
 
   /// Called as the pointer goes down on it, before the row's own

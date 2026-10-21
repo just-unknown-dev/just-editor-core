@@ -1,10 +1,9 @@
 /// One look for every control in the inspector.
 ///
-/// A row is a label of [labelWidth] and then its control, and every control
-/// — a number, a line of text, a dropdown, a colour, an asset, a yes or no —
-/// is the same box: the same fill, border, corner, height and type size. The
-/// numbers used to be darker, shorter and a size larger than the rest, and a
-/// bool was a bare checkbox, so a panel of them read as a jumble.
+/// A row is a label of `InspectorField.labelWidth` and then its control, and
+/// every control — a number, a line of text, a dropdown, a colour, an asset,
+/// a yes or no — is the same box: the same fill, border, corner, height and
+/// type size, so a panel of them reads as one.
 ///
 /// Anything added later takes its look from here rather than inventing one.
 library;
@@ -13,11 +12,21 @@ import 'package:flutter/material.dart';
 
 import '../look/editor_constants.dart';
 
+/// The inspector's field look: the label column, the box every control is
+/// drawn in, and the type in and beside it.
+///
+/// A row is a label [labelWidth] wide and then its control; a number, a
+/// line of text, a dropdown, a colour, an asset and an on/off switch all
+/// share one fill, border, corner, [height] and type size. A module's own
+/// field editor takes its look from here to match.
 abstract final class InspectorField {
   /// The label column, left of every control.
   static const double labelWidth = 96;
 
+  /// Type size of a value in a box, in logical pixels.
   static const double fontSize = 11;
+
+  /// Corner radius of every box, in logical pixels.
   static const double radius = 4;
 
   /// Inside a box, around its text.
@@ -34,18 +43,19 @@ abstract final class InspectorField {
   /// field and fails if this drifts from it.
   static const double height = 33;
 
+  /// Background of every box: the theme's [EditorTheme.inputBg].
   static Color get fill => EditorTheme.inputBg;
 
+  /// Text of the label column: muted, 10 px, medium weight.
   static TextStyle get labelStyle => TextStyle(
     color: EditorTheme.textMuted,
     fontSize: 10,
     fontWeight: FontWeight.w500,
   );
 
-  static TextStyle get valueStyle => TextStyle(
-    color: EditorTheme.textPrimary,
-    fontSize: fontSize,
-  );
+  /// Text of a value in a box: the theme's primary text at [fontSize].
+  static TextStyle get valueStyle =>
+      TextStyle(color: EditorTheme.textPrimary, fontSize: fontSize);
 
   static OutlineInputBorder _border(Color color) => OutlineInputBorder(
     borderRadius: BorderRadius.circular(radius),

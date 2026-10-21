@@ -20,8 +20,15 @@ class EditorDialogFrame extends StatelessWidget {
     this.scrimKey,
   });
 
+  /// The dialog's content, on the dialog background.
   final Widget child;
+
+  /// Whether the dialog fills the editor however roomy it is — a
+  /// workspace switched to full screen. Off by default.
   final bool filled;
+
+  /// The dialog's corner radius in logical pixels while it has a margin;
+  /// 12 by default.
   final double cornerRadius;
 
   /// The frame's line; the editor's faint border when null.

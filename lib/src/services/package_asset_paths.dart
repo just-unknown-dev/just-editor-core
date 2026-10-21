@@ -1,5 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
+
+import '../../io.dart';
+import 'project_files.dart';
 
 /// A package whose assets a project can use, as `packages/<name>/…`.
 class PackageAssetRoot {
@@ -22,7 +24,8 @@ class PackageAssetRoot {
   /// subfolders.
   final List<String> assetFolders;
 
-  /// In pub's shared cache: read-only, and shared by every project.
+  /// In pub's shared cache — or in the Flutter SDK: read-only, and shared
+  /// by every project.
   final bool inPubCache;
 
   /// Installed by the Asset Store (listed in `just_store.lock.json`).
@@ -47,6 +50,12 @@ class PackageAssetPaths {
   PackageAssetPaths._(this.root);
 
   static final Map<String, PackageAssetPaths> _byRoot = {};
+
+  /// The asset folders of packages that never change once there — in
+  /// pub's cache, whose folders are named by version, or in the Flutter
+  /// SDK — by folder: read once, not again on every change to the
+  /// resolution.
+  static final Map<String, List<String>> _fixedFolders = {};
 
   /// The resolver for the project in [root] (the working directory by
   /// default).
@@ -101,10 +110,15 @@ class PackageAssetPaths {
   }
 
   /// Whether [key] may be written: project files and packages outside
-  /// pub's cache.
+  /// pub's cache. Never a key that leaves the project or its package — one
+  /// that is absolute, has a drive letter, or climbs out with `..`: a path
+  /// read out of a scene must not reach a file anywhere else.
   bool isWritable(String key) {
-    final name = packageOf(key);
-    return name == null || (packages[name]?.isWritable ?? true);
+    final k = key.replaceAll(r'\', '/');
+    final name = packageOf(k);
+    if (name == null) return ProjectFiles.isContained(k);
+    if (!ProjectFiles.isContained(k.substring(10 + name.length))) return false;
+    return packages[name]?.isWritable ?? true;
   }
 
   /// Whether the game ships [key]: for a package key, the package is
@@ -167,9 +181,20 @@ class PackageAssetPaths {
     _stamp = '';
   }
 
+  /// Looks again at the next call — now, not at most twice a second —
+  /// whether anything it was read from changed: the store's lockfile, pub's
+  /// package list, or the pubspec of a package outside pub's cache. Reads
+  /// again only what did; a scan of the assets calls this rather than
+  /// [invalidate], which read every package's pubspec on each one.
+  void checkForChanges() => _checked = null;
+
   Map<String, PackageAssetRoot> _packages = const {};
   DateTime? _checked;
   String _stamp = '';
+
+  /// What each package's pubspec ships, by package folder, with the file's
+  /// date when it was read: read again only when that changes.
+  final Map<String, (String, List<String>)> _pubspecs = {};
 
   void _refresh() {
     final now = DateTime.now();
@@ -180,16 +205,60 @@ class PackageAssetPaths {
     _checked = now;
     final lock = File('$root/just_store.lock.json');
     final config = File('$root/.dart_tool/package_config.json');
-    final stamp = '${_mtime(lock)}|${_mtime(config)}';
+    final stamp = [
+      _mtime(lock),
+      _mtime(config),
+      // A project package's assets list, edited by hand or by the store.
+      for (final p in _packages.values)
+        if (!p.inPubCache) _mtime(File('${p.path}/pubspec.yaml')),
+    ].join('|');
     if (stamp == _stamp) return;
-    _stamp = stamp;
     _packages = _read(lock, config);
+    // Taken again with what was just read, so a package now known is
+    // part of what the next look compares.
+    _stamp = [
+      _mtime(lock),
+      _mtime(config),
+      for (final p in _packages.values)
+        if (!p.inPubCache) _mtime(File('${p.path}/pubspec.yaml')),
+    ].join('|');
+  }
+
+  /// The asset folders the pubspec in [path] ships, read only when the file
+  /// changed since it was last read.
+  List<String> _assetFoldersOf(String path) {
+    final pubspec = File('$path/pubspec.yaml');
+    final date = _mtime(pubspec);
+    final known = _pubspecs[path];
+    if (known != null && known.$1 == date) return known.$2;
+    var folders = const <String>[];
+    try {
+      if (pubspec.existsSync()) {
+        folders = parseAssetEntries(pubspec.readAsStringSync());
+      }
+    } on FileSystemException {
+      // Unreadable now: nothing shipped from it until it can be read.
+    }
+    _pubspecs[path] = (date, folders);
+    return folders;
   }
 
   Map<String, PackageAssetRoot> _read(File lock, File config) {
     final paths = <String, (String, bool)>{}; // name → (path, fromStore)
     // pub's resolution: every package, wherever it is.
     final configJson = _json(config);
+    final sdk = configJson?['flutterRoot'];
+    final sdkRoot = sdk is String && sdk.isNotEmpty
+        ? _normal(
+            Uri.parse(
+              sdk.endsWith('/') ? sdk : '$sdk/',
+            ).toFilePath(windows: Platform.isWindows),
+          )
+        : null;
+    final pubCache = Platform.environment['PUB_CACHE'];
+    final cacheRoot = pubCache == null || pubCache.isEmpty
+        ? null
+        : _normal(pubCache);
     final packages = configJson?['packages'];
     if (packages is List) {
       final base = config.parent.absolute.uri;
@@ -212,6 +281,9 @@ class PackageAssetPaths {
       for (final e in items.entries) {
         final item = e.value;
         if (item is! Map || item['path'] is! String) continue;
+        // A path that leaves the project is no place the store installs
+        // to: a hand-edited lockfile cannot make one a writable package.
+        if (!ProjectFiles.isContained(item['path'] as String)) continue;
         final name = '${e.key}';
         final storePath = _normal('$root/${item['path']}');
         final existing = paths[name];
@@ -229,19 +301,23 @@ class PackageAssetPaths {
       }
       final lower = path.toLowerCase();
       final inCache =
-          lower.contains('/pub/cache/') || lower.contains('/.pub-cache/');
-      // Pub-cache packages without assets are the vast majority: skip
-      // reading their pubspecs unless the store installed them.
-      final pubspec = File('$path/pubspec.yaml');
-      final folders = pubspec.existsSync()
-          ? parseAssetEntries(pubspec.readAsStringSync())
-          : const <String>[];
-      if (folders.isEmpty && !fromStore && inCache) return;
+          lower.contains('/pub/cache/') ||
+          lower.contains('/.pub-cache/') ||
+          (cacheRoot != null && _startsWith('$path/', '$cacheRoot/'));
+      final inSdk = sdkRoot != null && _startsWith('$path/', '$sdkRoot/');
+      // A package in pub's cache or the SDK never changes, so its pubspec
+      // is read once; the rest are read again when their file changes.
+      final fixed = (inCache || inSdk) && !fromStore;
+      final folders = fixed
+          ? _fixedFolders.putIfAbsent(path, () => _assetFoldersOf(path))
+          : _assetFoldersOf(path);
+      // Those without assets — nearly all of them — are not listed.
+      if (folders.isEmpty && fixed) return;
       out[name] = PackageAssetRoot(
         name: name,
         path: path,
         assetFolders: folders,
-        inPubCache: inCache,
+        inPubCache: inCache || inSdk,
         fromStore: fromStore,
       );
     });

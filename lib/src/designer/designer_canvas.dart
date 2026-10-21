@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:ui' show PointMode;
+
 import 'package:flutter/material.dart';
 import '../view/editor_view.dart';
 
@@ -12,6 +15,8 @@ import '../view/editor_view.dart';
 /// Extensions get the same primitives the built-in overlays use, so a project's
 /// overlay looks like it belongs rather than like it was bolted on.
 class DesignerCanvas {
+  /// Also sets [camera]'s viewport to [size], which every conversion here
+  /// depends on.
   DesignerCanvas({
     required this.canvas,
     required this.size,
@@ -106,16 +111,17 @@ class DesignerCanvas {
     if (total <= 0) return;
     final direction = (to - from) / total;
 
+    // Every dash in one call: a call a dash was hundreds of draws for a
+    // long line.
+    final points = <double>[];
     var travelled = 0.0;
     while (travelled < total) {
       final end = (travelled + dash).clamp(0.0, total);
-      canvas.drawLine(
-        from + direction * travelled,
-        from + direction * end,
-        paint,
-      );
+      final a = from + direction * travelled, b = from + direction * end;
+      points.addAll([a.dx, a.dy, b.dx, b.dy]);
       travelled = end + gap;
     }
+    canvas.drawRawPoints(PointMode.lines, Float32List.fromList(points), paint);
   }
 
   /// Draws a text label at a *screen* position.
@@ -128,20 +134,23 @@ class DesignerCanvas {
     Color color, {
     double fontSize = 11,
   }) {
-    TextPainter(
-        text: TextSpan(
-          text: text,
-          style: TextStyle(
-            color: color,
-            fontSize: fontSize,
-            fontWeight: FontWeight.w600,
-            shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 3)],
-          ),
+    // Laid out, painted and let go at once: called per label per frame, and
+    // a painter left to the garbage collector keeps its paragraph until then.
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+          shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 3)],
         ),
-        textDirection: TextDirection.ltr,
-      )
-      ..layout()
-      ..paint(canvas, screenPosition);
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter
+      ..paint(canvas, screenPosition)
+      ..dispose();
   }
 
   /// Draws a text label anchored to a world position.

@@ -12,10 +12,22 @@ class EditorScene {
   EditorScene({required this.name, this.mode = SceneMode.twoD});
 
   /// Reads the header of a scene file (see [toJson]).
-  factory EditorScene.fromJson(Map<String, dynamic> json) => EditorScene(
-    name: json['name'] as String,
-    mode: SceneMode.fromId(json['mode']),
-  );
+  ///
+  /// [name] is the file's own name, and wins over the `name` written inside
+  /// it: a scene copied to `level_07.scene.json` by hand still says
+  /// `level_01`, and saving it under that name would overwrite level_01.
+  /// Without [name], the file's `name` is used; a [FormatException] when it
+  /// has none.
+  factory EditorScene.fromJson(Map<String, dynamic> json, {String? name}) =>
+      EditorScene(
+        name:
+            name ??
+            switch (json['name']) {
+              final String n when n.isNotEmpty => n,
+              _ => throw const FormatException('The scene names no "name".'),
+            },
+        mode: SceneMode.fromId(json['mode']),
+      );
 
   /// The scene's name — its file is `<name>.scene.json`.
   final String name;

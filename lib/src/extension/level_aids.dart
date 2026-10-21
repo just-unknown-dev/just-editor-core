@@ -6,6 +6,8 @@ import 'package:just_game_engine/just_game_engine.dart' as jge;
 ///
 /// Speeds are metres a second, gravity metres a second each second.
 final class MovementProfile {
+  /// A profile that walks up slopes to 45° and onto steps 0.3 metres high
+  /// unless told otherwise.
   const MovementProfile({
     required this.jumpSpeed,
     required this.gravity,
@@ -30,7 +32,8 @@ final class MovementProfile {
   final double stepHeight;
 
   /// How high a jump carries it.
-  double get jumpHeight => gravity <= 0 ? 0 : jumpSpeed * jumpSpeed / (2 * gravity);
+  double get jumpHeight =>
+      gravity <= 0 ? 0 : jumpSpeed * jumpSpeed / (2 * gravity);
 
   /// How long a jump keeps it off level ground.
   double get airTime => gravity <= 0 ? 0 : 2 * jumpSpeed / gravity;

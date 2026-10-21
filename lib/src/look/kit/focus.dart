@@ -11,6 +11,8 @@ import '../editor_metrics.dart';
 class FocusOutline extends StatefulWidget {
   const FocusOutline({super.key, required this.child, this.radius});
 
+  /// What the ring is drawn around: a button or field that takes the
+  /// keyboard itself.
   final Widget child;
 
   /// The ring's corners; the small radius when null.

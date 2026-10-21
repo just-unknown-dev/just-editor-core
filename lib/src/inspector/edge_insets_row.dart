@@ -12,8 +12,14 @@ class EdgeInsetsEditorRow extends StatelessWidget {
     required this.onChanged,
   });
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The space shown, as left, top, right and bottom cells: written without
+  /// decimals, and a drag moves them by 1.
   final EdgeInsets insets;
+
+  /// Called with all four sides, one of them changed.
   final ValueChanged<EdgeInsets> onChanged;
 
   @override

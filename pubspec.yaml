@@ -2,11 +2,31 @@ name: just_editor_core
 description: "What a just_game_engine editor module builds on: the module contract, the editor's scope and services, undo, the inspector's rows and the UI kit."
 version: 0.1.0-dev.1
 homepage: https://justunknown.com
-publish_to: none
+repository: https://github.com/just-unknown-dev/just-editor-core
+issue_tracker: https://github.com/just-unknown-dev/just-editor-core/issues
+topics:
+  - game-engine
+  - gamedev
+  - level-editor
+  - editor
+  - plugin
+
+# Declared, so pub.dev does not infer platforms from dependencies. The
+# package compiles everywhere Flutter does (web and wasm too, through
+# package:just_editor_core/io.dart); the editor that runs its modules edits
+# a project only on a desktop.
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  windows:
+  web:
 
 environment:
   sdk: ^3.11.0
-  flutter: ">=3.47.0"
+  # just_game_engine's floor: Flutter GPU in Windows and Linux debug builds.
+  flutter: ">=3.47.1"
 
 dependencies:
   flutter:
@@ -18,7 +38,7 @@ dependencies:
   just_debugger: ^0.0.1
   just_colours: ^0.1.0
   just_storage: ^1.2.1
-  path_provider: ^2.1.2
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

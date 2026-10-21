@@ -2,29 +2,42 @@
 
 ## 0.1.0-dev.1
 
-First release: the part of `just_game_engine_editor` a module builds on, in a package of its own, so a kit or an editor plugin no longer depends on the whole editor.
+First release: what a `just_game_engine_editor` module builds on — a kit, a tool or a game's own editor module depends on this package, not on the editor. Needs `just_game_engine` ^2.0.0-dev.2, Flutter 3.47.1 and Dart 3.11; compiles on every Flutter platform, web and wasm included.
 
-- **Designers per scene mode**: `EditorModule.designerModes` and `EditorScope.designersFor`; the tool registry keeps a tool per mode.
-- **Gizmos per mode**: `GizmoMode`, `GizmoKind`, `GizmoModeSettings`, `GizmoSettings` (`OverlayUiSettings.gizmos`, saved one short string per mode); `DesignerOverlay.gizmoKind` and `ViewportOverlay.gizmoKind` (null on a designer overlay: not a gizmo, always drawn); `OverlayPaintContext.showsGizmo`; `LevelDesignerController.showsGizmosOf` and `OverlayPaintContext.showsGizmosOf` (what a gizmo may be drawn for: off the Level Map too).
-- `ToolbarButton.slot` (`ToolbarSlot`): a button stands with the modules' tools on the play toolbar, or in the column down the right under the transform tools, for a feature of the editor itself such as the Asset Store.
-- **Tools in 3-D**: `ToolContext.space` (`SpaceContext`: the pointer's ray, the working plane, the surface under it, snapping), `WorkingPlane`, `Designer3DState` (working plane, snapping, pivot, view mode, outline, slice, placement, arrays, the material in hand), `Placement3D`, `Array3DSpec`, `LevelToolHandler.onScroll`.
-- **Picking surfaces**: `RayTriangles`, `EntitySurfaceTest`, `EntityVertexSource`, `RayEntityPicker.placementAlong` and `localBoundsOf`.
-- **Editing**: `ComponentEdit` is public, with `beginAll` and `include`; `ViewportHandle.alsoEdits`.
-- **Level aids**: `LevelAids` and `MovementProfile` (`EditorModule.levelAids`; `EditorScope.movement`, `killHeight`).
-- **Prefabs**: `SceneCodec(prefabs:)` folds instances back into their files' terms as a scene is saved (`encodeForSave`, `markPrefabs`, `collapseMarked`); `EditorModule.prefabPictures`, `PrefabFavourites`; `AssetDrop.surface`.
-- Hide and lock are hierarchical (`EditorViewState.isHiddenIn`, `isLockedIn`); `EditorScope.viewOverride` for split views.
-- `EditorModule.onSceneSaving`: a module writes the files a scene refers to as it is saved (`ModuleRegistry.notifySceneSaving`).
-- `SidePanelSection.groups`: a module's side-panel section opens with its own tools, and is shut for the rest until opened.
-- **The module contract**: `EditorModule` and every contribution type, `EditorModuleContext`, `DesignerToolContext`, `ModuleRegistry` — with built-in modules (`builtIns`, `withBuiltIns`): what the host brings itself, registered ahead of the rest.
-- **The scope**: `EditorScope` and its services. It holds no built-ins of its own: the host passes them as modules (`EditorScope(builtIns: …)`, `addBuiltIn`). `openDock(id)` opens one of the host's docks.
-- **`DesignerSession`**: the Level Designer as a module sees it, handed to `saveEditorData`, `restoreEditorData`, status controls and side-panel sections. `CommandContext` carries it as `session`, and `host` for what dispatched the command.
-- **`EditorDropdown`**: its list opens as wide as its entries' names and details need (up to `maxMenuWidth`), not only as wide as the field; a detail too long for it is cut short, never squeezing the name out (`maxLabelWidth`).
-- **`EditorSlider`** shows the value dragged to while a drag lasts, whatever its `value`, and tells each step once: a live preview need not build what holds the slider again at every step.
-- **`FieldAccessory`**: a widget beside a component's fields, told of every edit made through them (`EditorModule.fieldAccessories`).
-- **Adding to another's window**: `EditorModule.workspaceContributions` — a tool on a window's toolbar (`WorkspaceTool`), a section in its panel (`WorkspaceSection`) or an overlay over its preview (`WorkspaceOverlay`), by the window's id (`EditorScope.workspaceContributionsFor`). Each is handed the window's `WorkspaceView`; the material windows' are typed (`WorkspaceIds.material`, `WorkspaceIds.material2D`; `Material3DWorkspaceView`, `Material2DWorkspaceView`: the material, what is shown, `change` as one undo step, `preview` and `endPreview`). A window puts them in place with `WorkspaceToolButtons`, `WorkspaceSections` and `workspaceOverlays`. The material files those views hand on come from `just_game_engine_formats`, a dependency now.
-- **`CameraSyncingView`**: a view that puts its own framing on the camera when shown.
-- **`PrefabColours`**: the colours the editor's own prefabs come in.
-- **`AudioDrop`**: what an audio file dropped on the viewport becomes.
-- Undo and the entity commands, the inspector's rows and field editors, the Level Designer's tool, overlay, snapping and grid API, the viewport's views and pickers, scene validation, the project's tags, physics layers and colours, preferences, the log, and the UI kit.
+Four libraries: `just_editor_core.dart` for modules, `kit.dart` for the UI kit alone, `host.dart` for the editor that hosts modules, and `io.dart`, the `dart:io` seam (stand-ins on the web).
 
-Three libraries: `just_editor_core.dart` for modules, `kit.dart` for the UI kit alone, `host.dart` for the editor that hosts them.
+### The module contract
+
+- `EditorModule`: every member has a default, so a module overrides only what it adds — field editors and accessories, component extras, prefabs (its own designer's, or shared with every designer), tools and tool groups, overlays, snap providers, layers, a grid topology, docks, workspaces, toolbar buttons, settings sections, theme presets, scene-tree actions, row decorations and icons, inspector sections, commands and key bindings, checks, asset kinds and actions, Tiled object mappers, tags, getting-started tips, level aids, and for 3-D views, markers, pick tests, viewport overlays, handles and prefab variants.
+- An asset kind's drop is for the scenes it says (`AssetKind.dropsIn`, `dropsInto`): a model's in 3-D ones; the host turns it away from the others.
+- Lifecycle: `onRegister` once, `onReassemble` after each hot reload, `onSceneOpened`, `onSceneSaving`, `onUpdate`, `onAssetChanged`, `onPlayStateChanged`, `dispose`.
+- Designers per scene mode (`EditorModule.designerModes`, `EditorScope.designersFor`), and `DesignerSession`, the open Level Designer as a module sees it.
+- Adding to another's window: `EditorModule.workspaceContributions` — a tool on its toolbar (`WorkspaceTool`), a section in its panel (`WorkspaceSection`) or an overlay over its preview (`WorkspaceOverlay`), by the window's id (`WorkspaceIds`); the material windows hand them a typed view (`Material3DWorkspaceView`, `Material2DWorkspaceView`).
+
+### The scope and its services
+
+- `EditorScope`: one editor's registries and services in a `just_di` container — the scene state and the selection, undo, the scene codec and store, preferences, the theme, the log, hide and lock, the project's tags, physics layers and colours, the editor's view and camera brain. Two scopes share nothing; `reload()` rebuilds every registry from the modules.
+- Built-in modules (`builtIns:`; `addBuiltIn` in `host.dart`): what the host brings itself, registered ahead of the rest.
+- Project files: `ProjectFiles` (whole-or-nothing writes, safe renames, paths kept inside the project), `PackageAssetPaths`, `AssetIndex`, and `AssetReferences` (in `host.dart`).
+- `EditorLogService`, `EditorPrefs` and `SettingPref`, `OverlayUiSettings`, `GizmoSettings`.
+
+### Undo and the model
+
+- `EditorHistory` and `EditorCommand`; the entity commands (`TransformCommand`, `CreateEntitiesCommand`, `DeleteEntitiesCommand`, `ComponentFieldCommand`, `EntityStateCommand`, `CompositeCommand` and the rest) and the hierarchy commands (`ReparentCommand`, `ReorderCommand`, `RenameCommand`, `GroupCommand`, `UngroupCommand`); `ComponentEdit` for an edit to a whole component.
+- `SceneCodec` and `SceneStore`, with prefab instances folded back into their files' terms on save; `UnknownComponents` keeps what no definition reads.
+- `CommandRegistry`, `DesignerCommand` and `KeyBinding`; `EditorKeys` and `ModifierKeys` (Cmd as the primary modifier on macOS, Backspace deletes).
+
+### The inspector
+
+- `buildComponentSections` and `DefinitionSection`, built from each component's `ComponentDefinition`; the field rows, `FieldEditorRegistry` and `FieldEditorContext`, `ComponentExtrasRegistry`, `CollectionEditor`, `AddComponentPicker`, component reordering, `LivePreview`.
+
+### The Level Designer and the viewport
+
+- The tool API: `LevelToolHandler`, `ToolContext` (with `SpaceContext` in 3-D), `ToolRegistry`, `PathTool`; `DesignerOverlay`, `SnapProvider`, `SmartSnap`, `GridTopology` and `SquareGrid`, `PrefabDefinition` and `PrefabRegistry`, `LayerPreset`.
+- 3-D: `WorkingPlane`, `Designer3DState`, `Placement3D`, `Array3DSpec`, `LevelAids` and `MovementProfile`.
+- Views and picking: `EditorView`, `GameCameraEditorView`, `CameraSyncingView`, `EntityPicker`, `RayEntityPicker` and `RayTriangles`; `EditorMarker`, `ViewportOverlay`, `ViewportHandles` and `HandleDragSession`, `PrefabVariant`.
+- Scene checks: `SceneValidator`, `ValidationContext`, `SceneProblem`, `ProblemFix`.
+
+### The UI kit
+
+- Buttons, fields, controls, dialogs, focus and `EditorKeyClaim`, the workspace frame, `EditorDropdown`, `showEditorMenu`, `EditorScrollbar`, `ScrubbableNumberField` and the snackbar, drawn with `EditorTheme` and `EditorMetrics` so they follow the editor's theme and accessibility settings.

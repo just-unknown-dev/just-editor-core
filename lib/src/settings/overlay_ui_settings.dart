@@ -7,15 +7,29 @@ import 'gizmo_settings.dart';
 
 /// How tightly the editor's chrome is packed: the three steps the settings
 /// dialog offers for [OverlayUiSettings.compactness].
-enum OverlayDensity { compact, standard, comfortable }
+enum OverlayDensity {
+  /// Tighter: a compactness of 0.85.
+  compact,
 
+  /// The default: a compactness of 1.
+  standard,
+
+  /// Roomier: a compactness of 1.15.
+  comfortable,
+}
+
+/// What the settings dialog shows for an [OverlayDensity], and the
+/// compactness it stands for.
 extension OverlayDensityX on OverlayDensity {
+  /// The step's name in the settings dialog.
   String get label => switch (this) {
     OverlayDensity.compact => 'Compact',
     OverlayDensity.standard => 'Default',
     OverlayDensity.comfortable => 'Comfortable',
   };
 
+  /// The [OverlayUiSettings.compactness] picking this step sets: a factor
+  /// on the editor's gaps and control sizes.
   double get compactness => switch (this) {
     OverlayDensity.compact => 0.85,
     OverlayDensity.standard => 1.0,
@@ -54,14 +68,18 @@ enum MessageLevel {
   errors,
 }
 
-/// A setting's allowed range, for the dialog's slider and for reading back a
-/// stored value that an older editor let go further.
+/// A setting's allowed range, for the dialog's slider and for clamping a
+/// stored or imported value as it is read.
 class SettingRange {
   const SettingRange(this.min, this.max);
 
+  /// The smallest value allowed.
   final double min;
+
+  /// The largest value allowed.
   final double max;
 
+  /// [value] brought inside [min] to [max].
   double clamp(double value) => value.clamp(min, max).toDouble();
 }
 
@@ -71,6 +89,8 @@ class SettingRange {
 /// store; modules keep theirs as [SettingPref]s beside it.
 @immutable
 class OverlayUiSettings {
+  /// Settings with the given values; each one left out is its default, as
+  /// in [OverlayUiSettings.defaults].
   const OverlayUiSettings({
     required this.textScale,
     required this.cornerRadius,
@@ -119,6 +139,8 @@ class OverlayUiSettings {
     this.messageLevel = MessageLevel.all,
   });
 
+  /// Every setting at its default: what an editor with nothing saved
+  /// starts with, and what a setting's reset goes back to.
   const OverlayUiSettings.defaults()
     : textScale = 1.0,
       cornerRadius = 4,
@@ -168,33 +190,66 @@ class OverlayUiSettings {
 
   /// The built-in Sunrise theme.
   static const String defaultThemeId = 'sunrise';
+
+  /// The Sunrise theme's coral accent.
   static const Color defaultAccent = Color(0xFFF5746F);
 
+  /// Minutes between autosaves out of the box.
   static const double defaultAutosaveMinutes = 2;
+
+  /// Backups kept per scene out of the box.
   static const int defaultBackupsToKeep = 10;
+
+  /// The frame rate a frame is measured against out of the box.
   static const double defaultTargetFps = 60;
+
+  /// Degrees a snapped turn moves in, out of the box.
   static const double defaultRotationStep = 15;
+
+  /// What a snapped scale moves in, out of the box: 10 %.
   static const double defaultScaleStep = 0.1;
+
+  /// The grid's lines out of the box: white, made faint by the grid's own
+  /// strength.
   static const Color defaultGridColour = Color(0xFFFFFFFF);
+
+  /// Undo steps kept out of the box.
   static const int defaultUndoLimit = 200;
+
+  /// Lines the Console keeps out of the box.
   static const int defaultConsoleMaxEntries = 1000;
 
+  /// [textScale]: 85 % to 135 %.
   static const SettingRange textScaleRange = SettingRange(0.85, 1.35);
+
+  /// [cornerRadius], in logical pixels.
   static const SettingRange cornerRadiusRange = SettingRange(0, 14);
+
+  /// [compactness].
   static const SettingRange compactnessRange = SettingRange(0.8, 1.2);
+
+  /// [animationSpeed]: half to twice as fast.
   static const SettingRange animationSpeedRange = SettingRange(0.5, 2);
 
   /// The status strip's ticker never runs faster than 100 ms.
   static const SettingRange metricRefreshRange = SettingRange(100, 2000);
+
+  /// [gridSize], in world units.
   static const SettingRange gridSizeRange = SettingRange(4, 256);
 
   /// Minutes between autosaves; 0 is off.
   static const SettingRange autosaveRange = SettingRange(0, 60);
+
+  /// [backupsToKeep].
   static const SettingRange backupsRange = SettingRange(1, 50);
+
+  /// [targetFps], in frames per second.
   static const SettingRange targetFpsRange = SettingRange(24, 240);
 
   /// Degrees.
   static const SettingRange rotationStepRange = SettingRange(1, 90);
+
+  /// [scaleStep]: 1 % to 100 %.
   static const SettingRange scaleStepRange = SettingRange(0.01, 1);
 
   /// World units; 0 is one grid cell.
@@ -211,11 +266,21 @@ class OverlayUiSettings {
 
   /// A multiple of the grid's own faint lines.
   static const SettingRange gridOpacityRange = SettingRange(0.25, 3);
+
+  /// [gizmoScale].
   static const SettingRange gizmoScaleRange = SettingRange(0.75, 2);
+
+  /// [undoLimit].
   static const SettingRange undoLimitRange = SettingRange(20, 2000);
+
+  /// [consoleMaxEntries].
   static const SettingRange consoleEntriesRange = SettingRange(100, 10000);
 
+  /// The editor's text size, on top of the system's own: 1 is 100 %.
   final double textScale;
+
+  /// The radius of fields' and buttons' corners, in logical pixels; cards,
+  /// menus and dialogs are rounder by a fixed amount.
   final double cornerRadius;
 
   /// The [ThemePreset] picked — a built-in accent or one a module added.
@@ -224,11 +289,29 @@ class OverlayUiSettings {
   /// That theme's accent, kept beside its id so the chrome can draw with it
   /// before the theme controller has heard from the modules.
   final Color accent;
+
+  /// How tightly the chrome is packed: a factor on its gaps and control
+  /// sizes, 1 by default. The settings dialog offers it as an
+  /// [OverlayDensity] ([density]).
   final double compactness;
+
+  /// How fast the chrome's animations run: 2 is twice as fast, 1 by
+  /// default.
   final double animationSpeed;
+
+  /// How often the status bar and the Profiler's history update, in
+  /// milliseconds.
   final double metricRefreshMs;
+
+  /// Whether the grid is drawn behind the level while editing.
   final bool showGrid;
+
+  /// Whether moving, turning and scaling snap, in the viewport and the
+  /// Level Designer. The primary modifier (Ctrl, Cmd on macOS) held while
+  /// dragging moves freely.
   final bool gridSnappingEnabled;
+
+  /// World units between the grid's lines.
   final double gridSize;
 
   // ── Accessibility ──────────────────────────────────────────────────────
@@ -269,7 +352,8 @@ class OverlayUiSettings {
   /// Open the scene that was open last time, as the editor starts.
   final bool reopenLastScene;
 
-  /// And the Level Designer, if it was open on it.
+  /// With [reopenLastScene], open the Level Designer too if it was open on
+  /// that scene.
   final bool reopenDesigner;
 
   // ── Keyboard ───────────────────────────────────────────────────────────
@@ -321,15 +405,18 @@ class OverlayUiSettings {
 
   // ── Viewport look ──────────────────────────────────────────────────────
 
+  /// The colour of the grid's lines, and of a tile map's cells; the grid
+  /// draws it faint, as strong as [gridOpacity] makes it.
   final Color gridColour;
 
-  /// A multiple of the grid's usual faintness: 1 is as it was.
+  /// A multiple of the grid's usual faintness: 1 is the default.
   final double gridOpacity;
 
   /// What the viewport clears to while editing; null keeps the game's own.
   final Color? backdrop;
 
-  /// How big the move, scale and turn handles are drawn: 1 is as they were.
+  /// How big the move, scale and turn handles are drawn: 1 is the default
+  /// size.
   final double gizmoScale;
 
   /// The outline round what is selected; null keeps each view's own.
@@ -365,11 +452,6 @@ class OverlayUiSettings {
 
   /// Which messages show over the editor.
   final MessageLevel messageLevel;
-
-  Color get themeColor => accent;
-
-  /// The text scale the chrome draws with.
-  double get effectiveTextScale => textScale;
 
   /// [rotationStep], in radians.
   double get rotationStepRadians => rotationStep * math.pi / 180;

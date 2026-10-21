@@ -14,6 +14,8 @@ class EditorKeyClaim extends StatelessWidget {
 
   /// Whether the panel wants [event], with the modifiers as they are now.
   final bool Function(KeyEvent event) claims;
+
+  /// The panel; its own `Focus.onKeyEvent` handles the keys claimed.
   final Widget child;
 
   /// Whether the widget that has the focus sits in a claim that wants

@@ -13,7 +13,7 @@ class LayerPreset {
     this.description,
   });
 
-  /// Matches [LayerComponent.layerId].
+  /// The layer's id, as an entity's `LayerComponent.layerId` names it.
   final String id;
 
   /// Draw order. Lower draws first (further back).
@@ -47,7 +47,7 @@ class LayerPresetRegistry {
 
   /// Draw order for [layerId].
   ///
-  /// Unregistered layers sort with [LevelLayers.main], so a layer found on an
+  /// Unregistered layers sort with `LevelLayers.main`, so a layer found on an
   /// entity but never declared still lands somewhere sensible rather than at
   /// one extreme.
   int orderOf(String layerId) =>

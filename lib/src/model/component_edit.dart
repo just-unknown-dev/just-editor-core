@@ -29,9 +29,11 @@ final class ComponentEdit {
   factory ComponentEdit.beginAll(
     EditorScope scope,
     List<jge.Component> components,
-  ) => ComponentEdit._(scope, [...components], [
-    for (final c in components) snapshot(scope, c),
-  ]);
+  ) => ComponentEdit._(
+    scope,
+    [...components],
+    [for (final c in components) snapshot(scope, c)],
+  );
 
   /// The editor.
   final EditorScope scope;
@@ -59,6 +61,7 @@ final class ComponentEdit {
   /// called [label] — nothing when nothing did. Whether anything did.
   bool commit(String label) {
     final commands = <EditorCommand>[];
+    final owners = _ownersOf(_components);
     for (final (i, component) in _components.indexed) {
       final before = _before[i];
       final definition = scope.definitions.definitionFor(component);
@@ -71,6 +74,9 @@ final class ComponentEdit {
           ComponentFieldCommand(
             label: '$label: ${field.name}',
             component: component,
+            // Found again by its entity when undone: a Stop, or a delete
+            // undone, puts a fresh instance in its place.
+            entity: owners[component],
             write: (c, v) => field.decodeInto(c, v),
             before: before[field.name],
             after: after,
@@ -80,7 +86,9 @@ final class ComponentEdit {
       }
     }
     if (commands.isEmpty) return false;
-    scope.history.pushApplied(CompositeCommand(label: label, commands: commands));
+    scope.history.pushApplied(
+      CompositeCommand(label: label, commands: commands),
+    );
     scope.sceneState
       ..markDirty()
       ..refresh();
@@ -89,7 +97,10 @@ final class ComponentEdit {
 
   /// Every saved field of [component], as saved (deep-copied); null for a
   /// component with no definition.
-  static Map<String, Object?>? snapshot(EditorScope scope, jge.Component component) {
+  static Map<String, Object?>? snapshot(
+    EditorScope scope,
+    jge.Component component,
+  ) {
     final definition = scope.definitions.definitionFor(component);
     if (definition == null) return null;
     return {
@@ -99,4 +110,20 @@ final class ComponentEdit {
   }
 
   static Object? _copy(Object? value) => jsonDecode(jsonEncode(value));
+
+  /// The entity of the scene's world each of [components] is on, where it
+  /// is on one — one pass over the world, once per edit.
+  Map<jge.Component, jge.Entity> _ownersOf(List<jge.Component> components) {
+    final wanted = Set<jge.Component>.identity()..addAll(components);
+    final out = Map<jge.Component, jge.Entity>.identity();
+    final types = {for (final c in components) c.componentType};
+    for (final e in scope.world.entities) {
+      for (final type in types) {
+        final c = e.getComponentByType(type);
+        if (c != null && wanted.contains(c)) out[c] = e;
+      }
+      if (out.length == wanted.length) break;
+    }
+    return out;
+  }
 }

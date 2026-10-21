@@ -72,27 +72,44 @@ class RayEntityPicker implements EntityPicker {
   final jge.Aabb3 _box = jge.Aabb3();
 
   @override
-  jge.Entity? pickAt(EditorView view, Offset screen, List<jge.Entity> candidates) {
+  jge.Entity? pickAt(
+    EditorView view,
+    Offset screen,
+    List<jge.Entity> candidates,
+  ) {
     view.screenToRay(screen, _ray);
-    final hits = <(double, jge.Entity)>[];
+    final hits = <(double, jge.Entity, double)>[];
     for (final entity in candidates) {
       if (!boundsOf(entity, _box)) continue;
       final t = _ray.intersectAabb(_box);
-      if (t != null) hits.add((t, entity));
+      if (t != null) hits.add((t, entity, _volumeOf(_box)));
     }
     if (hits.isEmpty) return null;
     hits.sort((a, b) => a.$1.compareTo(b.$1));
     final tests = _tests?.call() ?? const <EntityRayTest>[];
-    if (tests.isEmpty) return hits.first.$2;
     jge.Entity? best;
     var bestT = double.infinity;
-    for (final (boxT, entity) in hits) {
-      // A box no nearer than the best exact hit can't hold a nearer one.
+    // Boxes the ray starts inside — a trigger, a water volume, around the
+    // camera — meet it at 0, nearer than anything. Without an exact test
+    // to say where their shape really is, they are picked only when
+    // nothing else is under the pointer, the smallest first: else they
+    // would win every click made from inside them.
+    jge.Entity? around;
+    var aroundVolume = double.infinity;
+    for (final (boxT, entity, volume) in hits) {
+      // A box no nearer than the best hit can't hold a nearer one.
       if (boxT >= bestT) break;
       double? exact;
       for (final test in tests) {
         exact = test.distanceTo(entity, _ray);
         if (exact != null) break;
+      }
+      if (exact == null && boxT <= 0) {
+        if (volume < aroundVolume) {
+          aroundVolume = volume;
+          around = entity;
+        }
+        continue;
       }
       final t = exact ?? boxT;
       if (t < bestT) {
@@ -100,13 +117,22 @@ class RayEntityPicker implements EntityPicker {
         best = entity;
       }
     }
-    return best;
+    return best ?? around;
   }
+
+  static double _volumeOf(jge.Aabb3 box) =>
+      (box.max.x - box.min.x) *
+      (box.max.y - box.min.y) *
+      (box.max.z - box.min.z);
 
   /// Where something placed at [screen] goes: on the nearest of
   /// [candidates] under the pointer ([placementAlong]), or else on the
   /// ground, facing up.
-  SurfacePoint placementAt(EditorView view, Offset screen, Iterable<jge.Entity> candidates) {
+  SurfacePoint placementAt(
+    EditorView view,
+    Offset screen,
+    Iterable<jge.Entity> candidates,
+  ) {
     view.screenToRay(screen, _ray);
     return placementAlong(_ray, candidates) ??
         SurfacePoint(view.screenToGround(screen), jge.Vector3(0, -1, 0));
@@ -126,9 +152,7 @@ class RayEntityPicker implements EntityPicker {
     }
     if (hits.isEmpty) return null;
     hits.sort((a, b) => a.$1.compareTo(b.$1));
-    final tests = [
-      ...?_tests?.call().whereType<EntitySurfaceTest>(),
-    ];
+    final tests = [...?_tests?.call().whereType<EntitySurfaceTest>()];
     var bestT = double.infinity;
     jge.Entity? onto;
     jge.Vector3? facing;
@@ -167,13 +191,17 @@ class RayEntityPicker implements EntityPicker {
     final size = jge.Vector3.zero();
     box.sizeInto(size);
     double near(double v, double lo, double hi, double extent) {
-      final d = (v - lo).abs() < (v - hi).abs() ? (v - lo).abs() : (v - hi).abs();
+      final d = (v - lo).abs() < (v - hi).abs()
+          ? (v - lo).abs()
+          : (v - hi).abs();
       return d / (extent > 1e-9 ? extent : 1e-9);
     }
+
     final dx = near(at.x, box.min.x, box.max.x, size.x);
     final dy = near(at.y, box.min.y, box.max.y, size.y);
     final dz = near(at.z, box.min.z, box.max.z, size.z);
-    double side(double v, double lo, double hi) => (v - lo).abs() < (v - hi).abs() ? -1 : 1;
+    double side(double v, double lo, double hi) =>
+        (v - lo).abs() < (v - hi).abs() ? -1 : 1;
     final normal = dy <= dx && dy <= dz
         ? jge.Vector3(0, side(at.y, box.min.y, box.max.y), 0)
         : dx <= dz
@@ -183,7 +211,11 @@ class RayEntityPicker implements EntityPicker {
   }
 
   @override
-  List<jge.Entity> pickInRect(EditorView view, Rect screenRect, Iterable<jge.Entity> candidates) {
+  List<jge.Entity> pickInRect(
+    EditorView view,
+    Rect screenRect,
+    Iterable<jge.Entity> candidates,
+  ) {
     final out = <jge.Entity>[];
     final centre = jge.Vector3.zero();
     for (final entity in candidates) {
@@ -222,7 +254,9 @@ class RayEntityPicker implements EntityPicker {
     if (definitions != null) {
       for (final component in components) {
         final extent = definitions.definitionFor(component)?.extent;
-        if (extent != null && extent.boundsInto(component, _part)) out.addBox(_part);
+        if (extent != null && extent.boundsInto(component, _part)) {
+          out.addBox(_part);
+        }
       }
     }
     if (out.isEmpty) out.setValues(-0.25, -0.25, -0.25, 0.25, 0.25, 0.25);

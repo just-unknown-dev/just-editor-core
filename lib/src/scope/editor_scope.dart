@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/widgets.dart';
+import 'package:just_debugger/just_debugger.dart' show DebuggerLogLevel;
 import 'package:just_di/just_di.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_storage/just_storage.dart';
@@ -22,6 +23,7 @@ import '../extension/editor_contributions.dart';
 import '../settings/chrome_state.dart';
 import '../settings/overlay_settings_store.dart';
 import '../settings/editor_prefs.dart';
+import '../settings/editor_storage.dart';
 import '../look/theme_controller.dart';
 import '../designer/grid/grid_topology.dart';
 import '../designer/grid/square_grid.dart';
@@ -49,8 +51,13 @@ import '../extension/workspace_contributions.dart';
 /// Everything one editor owns: its registries, services and state, in a
 /// `just_di` container that is disposed with it.
 ///
-/// There are no process-wide registries. Two scopes in one process — two
-/// tests, or two editors side by side — share nothing. Component definitions
+/// Its registries and services are its own: two scopes in one process —
+/// two tests, or two editors side by side — have their own modules,
+/// commands, docks, history and settings. A few things are the process's,
+/// because the widgets that read them have no scope to ask: the look
+/// ([EditorTheme], [EditorMetrics], `ViewportLook`), the fields being
+/// typed in (`PendingFieldEdits`) and the resolved package paths
+/// (`PackageAssetPaths.of`, one per project folder). Component definitions
 /// come from the edited engine's [context] (a bare world's own context in a
 /// test), which the *game* fills at boot through its extensions; the scope
 /// reads them from there, so the editor and the game cannot disagree.
@@ -66,6 +73,18 @@ import '../extension/workspace_contributions.dart';
 /// a scope without them is the modules' alone: what a module's tests
 /// make.
 class EditorScope {
+  /// A scope over `engine`, or over a bare `world` when there is none; one
+  /// of the two is required.
+  ///
+  /// `builtIns` make the hosting editor's own modules, registered ahead of
+  /// `modules`. `parent` is the container [container] falls back to.
+  /// `log` and `settingsStore` replace the log service and the settings'
+  /// store; a scope given its own store also keeps the colour palettes'
+  /// recents off this machine's storage. `scenesRoot` is the scenes folder
+  /// (the project's `assets/scenes` when null); given one, a test's, the
+  /// tag, collision-layer and palette files are kept in it too.
+  /// `isDebug` is what modules are told ([EditorModuleContext.isDebug]);
+  /// the build's debug flag when null.
   EditorScope({
     Engine? engine,
     World? world,
@@ -84,6 +103,14 @@ class EditorScope {
        container = DiContainer(parent: parent),
        _isDebug = isDebug ?? kDebugMode {
     final defs = (engine?.context ?? world!.context).definitions;
+    // The editor's own store, opened once and shared by everything that
+    // keeps something in it: two stores on one file drop each other's
+    // keys. A store that cannot be reached — no platform to ask where, in
+    // a test — is reported where it is read, not as an error no one
+    // handled the moment it is opened.
+    Future<JustStandardStorage>? storage;
+    Future<JustStandardStorage> editorStorage() =>
+        storage ??= (openEditorStorage()..ignore());
     if (engine != null) container.registerSingleton<Engine>(engine);
     container
       ..registerSingleton<ComponentDefinitionRegistry>(defs)
@@ -92,12 +119,7 @@ class EditorScope {
       ..registerLazySingleton<CommandRegistry>(CommandRegistry.new)
       ..registerLazySingleton<EditorPrefs>(
         () => EditorPrefs(
-          // A store that cannot be reached — no platform to ask where, in a
-          // test — is reported where it is read, not as an error no one
-          // handled the moment the scope is made.
-          store:
-              settingsStore ??
-              OverlaySettingsStore(JustStorage.standard()..ignore()),
+          store: settingsStore ?? OverlaySettingsStore(editorStorage()),
         ),
         dispose: (p) => p.dispose(),
       )
@@ -150,18 +172,24 @@ class EditorScope {
         dispose: (d) => d.dispose(),
       )
       ..registerLazySingleton<ProjectTags>(() {
+        final tags =
+            ProjectTags(
+                path: ProjectTags.pathFor(scenesRoot: scenesRoot),
+                spawners: () => spawners.value,
+                onProblem: (problem) => _reportProject('tags', problem),
+              )
+              ..setDeclared(_declaredTags())
+              ..load(seed: _tagsTheScenesCarry);
+        // Only once it is made: a rebuild before then must not ask for it,
+        // and one after a failed try must not take it as made.
         _tagsMade = true;
-        return ProjectTags(
-            path: ProjectTags.pathFor(scenesRoot: scenesRoot),
-            spawners: () => spawners.value,
-          )
-          ..setDeclared(_declaredTags())
-          ..load(seed: _tagsTheScenesCarry);
+        return tags;
       }, dispose: (t) => t.dispose())
       ..registerLazySingleton<ProjectPhysicsLayers>(
         () => ProjectPhysicsLayers(
           path: ProjectPhysicsLayers.pathFor(scenesRoot: scenesRoot),
           context: () => engine?.context ?? _world?.context,
+          onProblem: (problem) => _reportProject('physics', problem),
         )..load(),
         dispose: (l) => l.dispose(),
       )
@@ -170,7 +198,8 @@ class EditorScope {
           path: ProjectColours.pathFor(scenesRoot: scenesRoot),
           // A scope given its own settings store is a test's: it keeps its
           // hands off this machine's storage.
-          storage: settingsStore == null ? JustStorage.standard : null,
+          storage: settingsStore == null ? editorStorage : null,
+          onProblem: (problem) => _reportProject('colours', problem),
         )..load(),
         dispose: (c) => c.dispose(),
       );
@@ -178,18 +207,23 @@ class EditorScope {
       this.modules.registerBuiltIn(make(this));
     }
     this.modules.registerAll(modules);
-    reload();
+    _reload();
   }
 
-  /// Adds the module [make] makes to the built-ins the editor brings
-  /// ([ModuleRegistry.builtIns]), ahead of every other module, and
-  /// rebuilds the registries — for a scope made before its host knew of
-  /// it. Nothing happens when one with that id is there already.
-  void addBuiltIn(EditorModule Function(EditorScope scope) make) {
+  /// A project file the editor keeps — the tags, the collision layers, the
+  /// palettes — that could not be read or written, in the log.
+  void _reportProject(String category, String problem) => log.log(
+    problem,
+    source: 'editor',
+    category: category,
+    level: DebuggerLogLevel.warning,
+  );
+
+  void _addBuiltIn(EditorModule Function(EditorScope scope) make) {
     final module = make(this);
     if (modules.byId(module.id) != null) return;
     modules.registerBuiltIn(module);
-    reload();
+    _reload();
   }
 
   VoidCallback? _stopFollowingSettings;
@@ -242,22 +276,18 @@ class EditorScope {
   /// when it is constructed.
   EngineContext get context => engine?.context ?? _world!.context;
 
-  /// Ways of putting the world back to the scene as authored, for whatever
-  /// shows something else in it for a while — a timeline being previewed.
-  final List<void Function()> authoredStateGuards = [];
+  final List<void Function()> _authoredStateGuards = [];
+  final List<bool Function()> _authoredStateHeld = [];
 
   /// Whether the world is, right now, something other than the scene as
-  /// authored — a timeline preview showing a moment of it. An autosave
-  /// waits rather than end it. Whoever adds a guard can add a test here.
-  final List<bool Function()> authoredStateHeld = [];
-
-  /// True while anything in [authoredStateHeld] says so.
-  bool get isAuthoredStateHeld => authoredStateHeld.any((held) => held());
+  /// authored — a timeline preview showing a moment of it, a value
+  /// previewed live. An autosave waits rather than end it.
+  bool get isAuthoredStateHeld => _authoredStateHeld.any((held) => held());
 
   /// Called by whoever is about to read the scene as authored: a save, the
-  /// snapshot a play-test starts from.
+  /// snapshot a play-test starts from. Ends every preview.
   void restoreAuthoredState() {
-    for (final restore in List.of(authoredStateGuards)) {
+    for (final restore in List.of(_authoredStateGuards)) {
       restore();
     }
   }
@@ -373,6 +403,17 @@ class EditorScope {
   /// What knows the real shape of some entities, for picking in 3-D.
   List<EntityRayTest> get pickTests => List.unmodifiable(_pickTests);
 
+  /// The kinds of file this editor knows — its modules' (a 3-D model), then
+  /// its own — for the asset browser, its filters and drops on the
+  /// viewport. The same object for the scope's life, brought up to date as
+  /// modules come and go, so an `AssetIndex` can be handed it once.
+  final AssetKinds assetKinds = AssetKinds();
+
+  /// The endings of the JSON files the modules declared as theirs
+  /// ([EditorModule.dataFileSuffixes]), lower case: never sprite atlases.
+  Set<String> get dataFileSuffixes => _dataFileSuffixes;
+  Set<String> _dataFileSuffixes = const {};
+
   final List<ViewportOverlay> _viewportOverlays = [];
   final List<WorkspaceContribution> _workspaceContributions = [];
 
@@ -428,7 +469,8 @@ class EditorScope {
   /// Module docks appended after the built-in ones, by order.
   List<DockDefinition> get docks => List.unmodifiable(_docks);
 
-  /// Full-screen tools modules add, by order.
+  /// The workspaces the modules add — the hosting editor's own among
+  /// them — by order.
   List<WorkspaceDefinition> get workspaces => List.unmodifiable(_workspaces);
 
   /// Scene checks modules add to the editor's own.
@@ -450,15 +492,12 @@ class EditorScope {
   /// (a module's — the editor's own 3-D view among them — see
   /// [EditorModule.viewFactories], else the 2-D view on [mainCamera]). One
   /// per mode, kept; switching mode hands the camera to the other.
-  EditorView get editorView => viewOverride ?? sceneView;
+  EditorView get editorView => _viewOverride ?? sceneView;
 
-  /// A view standing in for [editorView] while one pane of a split viewport
-  /// is drawn or handled: everything that picks, places or paints through
-  /// the editor's view then works in that pane. Null otherwise.
-  EditorView? viewOverride;
+  EditorView? _viewOverride;
 
-  /// The view of the open scene's mode, whatever stands in for it (see
-  /// [viewOverride]).
+  /// The view of the open scene's mode, whatever stands in for it (a pane
+  /// of a split viewport, while it is drawn or handled).
   EditorView get sceneView {
     final mode = sceneState.editingMode;
     final view = _views[mode] ??= (_viewFactories[mode] ?? _flatView)(this);
@@ -507,29 +546,31 @@ class EditorScope {
     debugLabel: 'workspaceFullScreen',
   );
 
+  /// Switches [workspaceFullScreen]: an open workspace goes from a dialog
+  /// to filling the editor, or back.
   void toggleWorkspaceFullScreen() =>
       workspaceFullScreen.value = !workspaceFullScreen.value;
 
   /// Reloads what the editor shows from [paths] — project files or
   /// `packages/<name>/…` keys — after a tool or a module wrote them, each
-  /// kind once. The plugin connects this; before it does, nothing happens.
-  void reloadAssets(Iterable<String> paths) => assetReloader?.call(paths);
+  /// kind once. The editor connects this; before it does, nothing happens.
+  void reloadAssets(Iterable<String> paths) => _assetReloader?.call(paths);
 
-  /// What [reloadAssets] calls: set by the editor plugin while it runs.
-  void Function(Iterable<String> paths)? assetReloader;
+  void Function(Iterable<String> paths)? _assetReloader;
 
   /// Opens the dock called [id] — `'assets'`, `'logs'` — where the editor
-  /// shows docks. Until it connects [dockOpener], nothing happens.
-  void openDock(String id) => dockOpener?.call(id);
+  /// shows docks. Until the editor connects it, nothing happens.
+  void openDock(String id) => _dockOpener?.call(id);
 
-  /// What [openDock] calls: set by the editor.
-  void Function(String id)? dockOpener;
+  void Function(String id)? _dockOpener;
 
   /// Opens the workspace called [id], on [path] if given. False when no
   /// module provides it.
   ///
   /// Over an open workspace with unsaved work, the open one is asked first
-  /// (see [setWorkspaceCloseGuard]); it opens only if that one agrees.
+  /// (see [setWorkspaceCloseGuard]); it opens only if that one agrees. True
+  /// then says only that it was asked: watch [activeWorkspace] for whether
+  /// it opened.
   bool openWorkspace(String id, {String? path}) {
     for (final w in workspaces) {
       if (w.id != id) continue;
@@ -539,7 +580,9 @@ class EditorScope {
           open != null && (open.definition.id != id || open.path != path);
       if (guard != null && replacing) {
         unawaited(() async {
-          if (!await guard()) return;
+          if (!await _ask(guard)) return;
+          // Closed, or another opened in its place, while it asked.
+          if (_disposed || !identical(activeWorkspace.value, open)) return;
           _clearCloseGuard();
           activeWorkspace.value = OpenWorkspace(w, path);
         }());
@@ -562,12 +605,17 @@ class EditorScope {
   /// [of] is the workspace asking; the open one when null. Clearing is
   /// only ever for its own: a workspace let go after another has opened
   /// in its place does not take the new one's question with it.
+  ///
+  /// A question from a workspace that is no longer the open one — an
+  /// async save in it that finished after the switch — is not taken: the
+  /// open one would be asked a question its window cannot show.
   void setWorkspaceCloseGuard(
     Future<bool> Function()? guard, {
     OpenWorkspace? of,
   }) {
     final owner = of ?? activeWorkspace.value;
     if (guard == null && !identical(owner, _closeGuardOf)) return;
+    if (guard != null && !identical(owner, activeWorkspace.value)) return;
     _closeGuard = guard;
     _closeGuardOf = guard == null ? null : owner;
   }
@@ -575,10 +623,35 @@ class EditorScope {
   /// Closes the open workspace once its guard agrees. True when it closed.
   Future<bool> requestCloseWorkspace() async {
     final guard = _closeGuard;
-    if (guard != null && !await guard()) return false;
+    final open = activeWorkspace.value;
+    if (guard != null && !await _ask(guard)) return false;
+    // Closed, or another opened in its place, while it asked.
+    if (_disposed || !identical(activeWorkspace.value, open)) return false;
     closeWorkspace();
     return true;
   }
+
+  /// [guard]'s answer; no — the workspace stays — when it throws, which
+  /// the log then says.
+  Future<bool> _ask(Future<bool> Function() guard) async {
+    try {
+      return await guard();
+    } on Object catch (error, stack) {
+      if (!_disposed) {
+        log.log(
+          'The open window could not ask about its unsaved work, so it '
+          'stays open: $error',
+          source: 'editor',
+          category: 'workspace',
+          level: DebuggerLogLevel.error,
+          details: '$stack',
+        );
+      }
+      return false;
+    }
+  }
+
+  bool _disposed = false;
 
   /// Opens whichever workspace best fits [path]'s ending. False when none
   /// does.
@@ -610,7 +683,8 @@ class EditorScope {
     _closeGuardOf = null;
   }
 
-  /// Module buttons appended after the built-in toolbar, by order.
+  /// Module buttons over the viewport, by order: after the built-in play
+  /// toolbar, or in the tool column ([ToolbarButton.slot]).
   List<ToolbarButton> get toolbarButtons => List.unmodifiable(_toolbarButtons);
 
   /// What modules say on the start card, shown while no scene is open, by
@@ -638,7 +712,8 @@ class EditorScope {
     return null;
   }
 
-  /// Module rules that keep an entity from being deleted or renamed.
+  /// The modules' rules for which entities must not be deleted; see
+  /// [isProtected].
   List<EntityProtectionRule> get protectionRules =>
       List.unmodifiable(_protectionRules);
 
@@ -724,6 +799,48 @@ class EditorScope {
   /// Whether any module protects [entity].
   bool isProtected(Entity entity) =>
       _protectionRules.any((r) => r.isProtected(entity));
+
+  /// [entities] less any a module protects ([isProtected]), or that has a
+  /// protected entity under it — deleting a parent deletes what is under it.
+  /// Each one kept is said in the log, so a delete that leaves something
+  /// behind says why. Every delete the editor makes asks this first.
+  List<Entity> deletable(Iterable<Entity> entities) {
+    if (_protectionRules.isEmpty) return entities.toList();
+    final out = <Entity>[];
+    for (final entity in entities) {
+      final guard = protectedIn(entity);
+      if (guard == null) {
+        out.add(entity);
+        continue;
+      }
+      final what = guard.name ?? 'Entity ${guard.id}';
+      log.log(
+        identical(guard, entity)
+            ? '$what is protected by a module, so it was not deleted.'
+            : '$what is protected by a module, so '
+                  '${entity.name ?? 'what holds it'} was not deleted.',
+        source: 'editor',
+        category: 'scene',
+        level: DebuggerLogLevel.warning,
+      );
+    }
+    return out;
+  }
+
+  /// [entity] itself when a module protects it, else the first protected
+  /// entity under it; null when none is.
+  Entity? protectedIn(Entity entity) {
+    if (isProtected(entity)) return entity;
+    for (final id
+        in entity.getComponent<ChildrenComponent>()?.childIds ??
+            const <EntityId>[]) {
+      final child = world.getEntity(id);
+      if (child == null) continue;
+      final found = protectedIn(child);
+      if (found != null) return found;
+    }
+    return null;
+  }
 
   /// Which control edits which field type.
   FieldEditorRegistry get fieldEditors => container.get<FieldEditorRegistry>();
@@ -837,7 +954,8 @@ class EditorScope {
   );
 
   List<TagDefinition> _declaredTags() => [
-    for (final module in modules.withBuiltIns) ...module.tags,
+    for (final module in modules.withBuiltIns)
+      ...?_fromModule(module, 'tags', () => module.tags),
   ];
 
   /// The tags the project's scene files — and the open world — carry: what
@@ -851,35 +969,139 @@ class EditorScope {
     }
     final references = tagReferences;
     for (final name in scenes.listSceneNames()) {
-      final raw = scenes.readRawSync(name);
-      if (raw == null) continue;
-      final migrated = SceneFormat.migrate(raw, hooks: context.migrations);
-      for (final use in references.inScene(migrated)) {
-        if (use.kind == TagUseKind.carried) found.add(use.tag);
+      // A scene that cannot be read — broken, from a newer engine, not a
+      // scene at all — gives no tags; the others still do.
+      try {
+        final raw = scenes.readRawSync(name);
+        if (raw == null) continue;
+        final migrated = SceneFormat.migrate(raw, hooks: context.migrations);
+        for (final use in references.inScene(migrated)) {
+          if (use.kind == TagUseKind.carried) found.add(use.tag);
+        }
+      } on Object {
+        continue;
       }
     }
     return found;
   }
 
-  /// After a hot reload: the editor's own presets made again, each module
-  /// told ([EditorModule.onReassemble]), then every registry rebuilt from
-  /// the code as it now is ([reload]), and the palette in use shown as it
-  /// now is. `JustGameEditorPlugin.reassemble` calls this.
-  void reassemble() {
+  void _reassemble() {
     theme.resetPresets();
     final context = EditorModuleContext(scope: this, isDebug: _isDebug);
     for (final module in modules.withBuiltIns) {
-      if (_registered.contains(module)) module.onReassemble(context);
+      if (!_registered.contains(module)) continue;
+      _fromModule(module, 'onReassemble', () => module.onReassemble(context));
     }
-    reload();
+    _reload();
     theme.refreshCurrent();
   }
 
-  /// Rebuilds every scope-level registry from scratch: built-ins, then each
-  /// module's contributions in registration order. Idempotent, so it is safe
-  /// on every hot reload — and nothing a module stopped contributing survives.
-  /// A module's [EditorModule.onRegister] runs on its first pass only.
-  void reload() {
+  /// What [module] says through [read]; [fallback] — and the failure in
+  /// the log — when it throws. A module with a bug must not stop the
+  /// editor from starting, or leave a rebuild half done.
+  T? _fromModule<T>(
+    EditorModule module,
+    String what,
+    T Function() read, [
+    T? fallback,
+  ]) {
+    try {
+      return read();
+    } on Object catch (error, stack) {
+      _moduleFailed(module, what, error, stack);
+      return fallback;
+    }
+  }
+
+  void _moduleFailed(
+    EditorModule module,
+    String what,
+    Object error,
+    StackTrace stack,
+  ) {
+    String name;
+    try {
+      name = module.id;
+    } on Object {
+      name = '${module.runtimeType}';
+    }
+    log.log(
+      'The module "$name" failed ($what), so the editor goes on without '
+      'it there: $error',
+      source: 'editor',
+      category: 'modules',
+      level: DebuggerLogLevel.error,
+      details: '$stack',
+    );
+  }
+
+  /// Everything [module] adds to the editor's registries, read before any
+  /// of it is added — a module whose getter throws adds nothing, rather
+  /// than half of what it brings — and returned as what adds it.
+  void Function() _contributionsOf(EditorModule module, AssetKinds kinds) {
+    final fieldEditors = module.fieldEditors;
+    final inheritedColors = module.inheritedColors;
+    final componentExtras = module.componentExtras;
+    final commands = module.commands;
+    final keyBindings = module.keyBindings;
+    final settingsSections = module.settingsSections;
+    final docks = module.docks;
+    final toolbarButtons = module.toolbarButtons;
+    final gettingStartedTips = module.gettingStartedTips;
+    final workspaces = module.workspaces;
+    final assetActions = module.assetActions;
+    final tiledObjectMappers = module.tiledObjectMappers;
+    final validators = module.validators;
+    final sceneTreeActions = module.sceneTreeActions;
+    final rowDecorations = module.rowDecorations;
+    final entityIcons = module.entityIcons;
+    final protectionRule = module.protectionRule;
+    final inspectorSections = module.inspectorSections;
+    final fieldAccessories = module.fieldAccessories;
+    final viewFactories = module.viewFactories;
+    final markers = module.markers;
+    final pickTests = module.pickTests;
+    final prefabPictures = module.prefabPictures;
+    final assetKinds = module.assetKinds;
+    final viewportOverlays = module.viewportOverlays;
+    final workspaceContributions = module.workspaceContributions;
+    final viewportHandles = module.viewportHandles;
+    final prefabVariants = module.prefabVariants;
+    final themePresets = module.themePresets;
+    return () {
+      this.fieldEditors.registerAll(fieldEditors, override: true);
+      this.fieldEditors.inheritedColors.addAll(inheritedColors);
+      extras.registerAll(componentExtras);
+      this.commands.registerAll(commands, override: true);
+      this.commands.bindAll(keyBindings);
+      _settingsSections.addAll(settingsSections);
+      _docks.addAll(docks);
+      _toolbarButtons.addAll(toolbarButtons);
+      _gettingStartedTips.addAll(gettingStartedTips);
+      _workspaces.addAll(workspaces);
+      _assetActions.addAll(assetActions);
+      _tiledObjectMappers.addAll(tiledObjectMappers);
+      _validators.addAll(validators);
+      _sceneTreeActions.addAll(sceneTreeActions);
+      _rowDecorations.addAll(rowDecorations);
+      _entityIcons.addAll(entityIcons);
+      if (protectionRule != null) _protectionRules.add(protectionRule);
+      _inspectorSections.addAll(inspectorSections);
+      _fieldAccessories.addAll(fieldAccessories);
+      _viewFactories.addAll(viewFactories);
+      _markers.addAll(markers);
+      _pickTests.addAll(pickTests);
+      _prefabPictures.addAll(prefabPictures);
+      assetKinds.forEach(kinds.add);
+      _viewportOverlays.addAll(viewportOverlays);
+      _workspaceContributions.addAll(workspaceContributions);
+      _viewportHandles.addAll(viewportHandles);
+      _prefabVariants.addAll(prefabVariants);
+      themePresets.forEach(theme.register);
+    };
+  }
+
+  void _reload() {
     fieldEditors.clear();
     extras.clear();
     commands.clear();
@@ -909,51 +1131,38 @@ class EditorScope {
     _workspaceContributions.clear();
     _viewportHandles.clear();
     _prefabVariants.clear();
-    final kinds = AssetKinds();
+    // What a file is, for the browser and drops: the editor's kinds and the
+    // modules'.
+    assetKinds.replaceAll(const []);
     final context = EditorModuleContext(scope: this, isDebug: _isDebug);
     for (final module in modules.withBuiltIns) {
-      fieldEditors.registerAll(module.fieldEditors, override: true);
-      fieldEditors.inheritedColors.addAll(module.inheritedColors);
-      extras.registerAll(module.componentExtras);
-      commands.registerAll(module.commands, override: true);
-      commands.bindAll(module.keyBindings);
-      _settingsSections.addAll(module.settingsSections);
-      _docks.addAll(module.docks);
-      _toolbarButtons.addAll(module.toolbarButtons);
-      _gettingStartedTips.addAll(module.gettingStartedTips);
-      _workspaces.addAll(module.workspaces);
-      _assetActions.addAll(module.assetActions);
-      _tiledObjectMappers.addAll(module.tiledObjectMappers);
-      _validators.addAll(module.validators);
-      _sceneTreeActions.addAll(module.sceneTreeActions);
-      _rowDecorations.addAll(module.rowDecorations);
-      _entityIcons.addAll(module.entityIcons);
-      if (module.protectionRule case final rule?) _protectionRules.add(rule);
-      _inspectorSections.addAll(module.inspectorSections);
-      _fieldAccessories.addAll(module.fieldAccessories);
-      _viewFactories.addAll(module.viewFactories);
-      _markers.addAll(module.markers);
-      _pickTests.addAll(module.pickTests);
-      _prefabPictures.addAll(module.prefabPictures);
-      module.assetKinds.forEach(kinds.add);
-      _viewportOverlays.addAll(module.viewportOverlays);
-      _workspaceContributions.addAll(module.workspaceContributions);
-      _viewportHandles.addAll(module.viewportHandles);
-      _prefabVariants.addAll(module.prefabVariants);
-      module.themePresets.forEach(theme.register);
+      final add = _fromModule(
+        module,
+        'what it adds to the editor',
+        () => _contributionsOf(module, assetKinds),
+      );
+      if (add != null) _fromModule(module, 'adding what it brings', add);
       // Once per module: setup that loads files or installs into the engine
       // must not run again on each rebuild — see [reassemble].
-      if (_registered.add(module)) module.onRegister(context);
+      if (_registered.add(module)) {
+        _fromModule(module, 'onRegister', () => module.onRegister(context));
+      }
     }
     _registered.retainWhere(modules.withBuiltIns.contains);
     _viewportOverlays.sort((a, b) => a.order.compareTo(b.order));
     _workspaceContributions.sort((a, b) => a.order.compareTo(b.order));
-    // What a file is, for the browser and drops: the editor's kinds and the
-    // modules'.
-    AssetKinds.active = kinds;
-    ModuleDataFiles.replace([
-      for (final module in modules.withBuiltIns) ...module.dataFileSuffixes,
-    ]);
+    // The modules' own JSON files, never taken for sprite atlases.
+    _dataFileSuffixes = {
+      for (final module in modules.withBuiltIns)
+        for (final suffix
+            in _fromModule(
+                  module,
+                  'dataFileSuffixes',
+                  () => module.dataFileSuffixes,
+                ) ??
+                const <String>[])
+          suffix.toLowerCase(),
+    };
     // Made when first asked for — reading it scans the scenes — and kept
     // in step with the modules from then on.
     if (_tagsMade) tags.setDeclared(_declaredTags());
@@ -1002,25 +1211,45 @@ class EditorScope {
     prefabs.clear();
     // The editor's own prefabs, whichever designer is chosen; then what
     // every module shares; then the chosen designer's.
+    // Each module's part read whole, or — when it throws — left out.
     final builtIns = modules.builtIns;
     for (final module in builtIns) {
-      prefabs.registerAll(module.prefabs);
+      prefabs.registerAll(
+        _fromModule(module, 'prefabs', () => module.prefabs) ?? const [],
+      );
     }
     for (final module in modules.withBuiltIns) {
-      prefabs.registerAll(module.sharedPrefabs);
+      prefabs.registerAll(
+        _fromModule(module, 'sharedPrefabs', () => module.sharedPrefabs) ??
+            const [],
+      );
     }
     layers.clear();
     layers.registerAll(LayerPresetRegistry.builtIn);
     final chosen = designerModules;
     for (final module in [...builtIns, ...chosen]) {
-      _prefabCategories.addAll(module.prefabCategories);
-      _statusControls.addAll(module.statusControls);
-      _designerPanels.addAll(module.designerPanels);
-      _grid = module.gridTopology ?? _grid;
-      layers.registerAll(module.layers);
+      final part = _fromModule(
+        module,
+        'its Level Designer',
+        () => (
+          categories: module.prefabCategories,
+          controls: module.statusControls,
+          panels: module.designerPanels,
+          grid: module.gridTopology,
+          layers: module.layers,
+        ),
+      );
+      if (part == null) continue;
+      _prefabCategories.addAll(part.categories);
+      _statusControls.addAll(part.controls);
+      _designerPanels.addAll(part.panels);
+      _grid = part.grid ?? _grid;
+      layers.registerAll(part.layers);
     }
     for (final module in chosen) {
-      prefabs.registerAll(module.prefabs);
+      prefabs.registerAll(
+        _fromModule(module, 'prefabs', () => module.prefabs) ?? const [],
+      );
     }
     _statusControls.sort((a, b) => a.order.compareTo(b.order));
     _designerPanels.sort((a, b) => a.order.compareTo(b.order));
@@ -1033,6 +1262,7 @@ class EditorScope {
 
   /// Disposes every service this scope owns, in reverse registration order.
   void dispose() {
+    _disposed = true;
     _stopFollowingSettings?.call();
     activeDesigner.dispose();
     activeWorkspace.dispose();
@@ -1046,6 +1276,56 @@ class EditorScope {
   }
 }
 
+/// What only the editor that hosts a scope does with it: rebuild its
+/// registries, add its own tools, and connect what the scope asks of the
+/// editor's windows. Exported by `host.dart`; a module never needs it.
+extension EditorScopeHost on EditorScope {
+  /// Adds the module [make] makes to the built-ins the editor brings
+  /// ([ModuleRegistry.builtIns]), ahead of every other module, and
+  /// rebuilds the registries — for a scope made before its host knew of
+  /// it. Nothing happens when one with that id is there already.
+  void addBuiltIn(EditorModule Function(EditorScope scope) make) =>
+      _addBuiltIn(make);
+
+  /// After a hot reload: the editor's own presets made again, each module
+  /// told ([EditorModule.onReassemble]), then every registry rebuilt from
+  /// the code as it now is ([reload]), and the palette in use shown as it
+  /// now is. `JustGameEditorPlugin.reassemble` calls this.
+  void reassemble() => _reassemble();
+
+  /// Rebuilds every scope-level registry from scratch: built-ins, then each
+  /// module's contributions in registration order. Idempotent, so it is safe
+  /// on every hot reload — and nothing a module stopped contributing survives.
+  /// A module's [EditorModule.onRegister] runs on its first pass only.
+  void reload() => _reload();
+
+  /// Ways of putting the world back to the scene as authored
+  /// ([EditorScope.restoreAuthoredState]), for whatever shows something
+  /// else in it for a while — a timeline being previewed.
+  List<void Function()> get authoredStateGuards => _authoredStateGuards;
+
+  /// Tests of whether the world is held away from the scene as authored
+  /// ([EditorScope.isAuthoredStateHeld]); whoever adds a guard can add one.
+  List<bool Function()> get authoredStateHeld => _authoredStateHeld;
+
+  /// A view standing in for [EditorScope.editorView] while one pane of a
+  /// split viewport is drawn or handled: everything that picks, places or
+  /// paints through the editor's view then works in that pane. Null
+  /// otherwise.
+  EditorView? get viewOverride => _viewOverride;
+  set viewOverride(EditorView? view) => _viewOverride = view;
+
+  /// What [EditorScope.reloadAssets] calls: set by the editor plugin while
+  /// it runs.
+  void Function(Iterable<String> paths)? get assetReloader => _assetReloader;
+  set assetReloader(void Function(Iterable<String> paths)? reload) =>
+      _assetReloader = reload;
+
+  /// What [EditorScope.openDock] calls: set by the editor.
+  void Function(String id)? get dockOpener => _dockOpener;
+  set dockOpener(void Function(String id)? open) => _dockOpener = open;
+}
+
 /// Makes an [EditorScope] available to a widget subtree.
 class EditorScopeProvider extends InheritedWidget {
   const EditorScopeProvider({
@@ -1054,6 +1334,7 @@ class EditorScopeProvider extends InheritedWidget {
     required super.child,
   });
 
+  /// The scope [of] and [maybeOf] find below this widget.
   final EditorScope scope;
 
   /// The nearest scope above [context].
@@ -1076,6 +1357,9 @@ class EditorScopeProvider extends InheritedWidget {
 class OpenWorkspace {
   const OpenWorkspace(this.definition, [this.path]);
 
+  /// Which workspace is open.
   final WorkspaceDefinition definition;
+
+  /// The project-relative file it was opened on; null when none.
   final String? path;
 }

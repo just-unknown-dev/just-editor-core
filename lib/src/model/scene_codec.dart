@@ -19,7 +19,7 @@ class SceneCodec {
   final ComponentDefinitionRegistry definitions;
 
   /// The prefab files read so far, by path: what an instance's entities
-  /// are compared with when it is saved ([collapse]). Without it, an
+  /// are compared with when it is saved ([collapseMarked]). Without it, an
   /// instance is saved with the changes it was loaded with.
   final PrefabFile? Function(String path)? prefabs;
 
@@ -87,7 +87,9 @@ class SceneCodec {
   /// prefab instance's records folded into one entry holding what the
   /// instance changes ([PrefabExpander.collapseScene]); [records] itself
   /// when nothing came from a prefab.
-  List<Map<String, dynamic>> collapseMarked(List<Map<String, dynamic>> records) {
+  List<Map<String, dynamic>> collapseMarked(
+    List<Map<String, dynamic>> records,
+  ) {
     final marked = records.any(
       (r) => r.containsKey('prefabRef') || r.containsKey('parentInside'),
     );
@@ -106,43 +108,52 @@ class SceneCodec {
   List<Map<String, dynamic>> encodeForSave(List<Entity> ordered) {
     final actual = encodeInOrder(ordered);
     final homes = <Entity, TransformSnapshot>{};
-    for (final top in ordered) {
-      final instance = top.getComponent<PrefabInstanceComponent>();
-      final t = top.getComponent<TransformComponent>();
-      if (instance == null || instance.missing || t == null) continue;
-      final made = PrefabExpander.expand(
-        PrefabInstance(path: instance.path),
-        prefabs ?? (_) => null,
-      );
-      final saved = made?.first.componentOf('TransformComponent');
-      final home = saved == null ? null : decode(saved);
-      if (home is! TransformComponent) continue;
-      final world = top.world;
-      world?.transformHierarchy.propagateFrom(top);
-      homes[top] = TransformSnapshot.of(top);
-      final turn = Quaternion.identity();
-      home.rotationInto(turn);
-      t
-        ..position.setFrom(home.position)
-        ..scale.setFrom(home.scale)
-        ..setRotation(turn);
-      world?.transformHierarchy.propagateFrom(top);
-    }
-    if (homes.isEmpty) {
-      markPrefabs(ordered, actual);
-      return actual;
-    }
-    final inPrefab = encodeInOrder(ordered);
-    // Back where they are, the innermost first.
-    for (final MapEntry(key: top, value: snapshot) in homes.entries.toList().reversed) {
-      snapshot.applyTo(top);
-      top.world?.transformHierarchy.propagateFrom(top);
+    final List<Map<String, dynamic>> inPrefab;
+    try {
+      for (final top in ordered) {
+        final instance = top.getComponent<PrefabInstanceComponent>();
+        final t = top.getComponent<TransformComponent>();
+        if (instance == null || instance.missing || t == null) continue;
+        final made = PrefabExpander.expand(
+          PrefabInstance(path: instance.path),
+          prefabs ?? (_) => null,
+        );
+        final saved = made?.first.componentOf('TransformComponent');
+        final home = saved == null ? null : decode(saved);
+        if (home is! TransformComponent) continue;
+        final world = top.world;
+        world?.transformHierarchy.propagateFrom(top);
+        homes[top] = TransformSnapshot.of(top);
+        final turn = Quaternion.identity();
+        home.rotationInto(turn);
+        t
+          ..position.setFrom(home.position)
+          ..scale.setFrom(home.scale)
+          ..setRotation(turn);
+        world?.transformHierarchy.propagateFrom(top);
+      }
+      if (homes.isEmpty) {
+        markPrefabs(ordered, actual);
+        return actual;
+      }
+      inPrefab = encodeInOrder(ordered);
+    } finally {
+      // Back where they are, the innermost first — whatever happened: a
+      // save that fails part-way must not leave the instances moved, or
+      // the next one writes them where they were moved to.
+      for (final MapEntry(key: top, value: snapshot)
+          in homes.entries.toList().reversed) {
+        snapshot.applyTo(top);
+        top.world?.transformHierarchy.propagateFrom(top);
+      }
     }
     final homeIds = {for (final top in homes.keys) top.id};
     final out = [
       for (var i = 0; i < ordered.length; i++)
         switch (ordered[i].getComponent<PrefabLink>()) {
-          final link? when homeIds.contains(link.instance) && link.instance != ordered[i].id =>
+          final link?
+              when homeIds.contains(link.instance) &&
+                  link.instance != ordered[i].id =>
             inPrefab[i],
           _ => actual[i],
         },
@@ -164,7 +175,8 @@ class SceneCodec {
       final link = e?.getComponent<PrefabLink>();
       if (link == null) return null;
       final top = index[link.instance];
-      if (top == null || !ordered[top].hasComponent<PrefabInstanceComponent>()) {
+      if (top == null ||
+          !ordered[top].hasComponent<PrefabInstanceComponent>()) {
         return null;
       }
       return link;
@@ -181,18 +193,23 @@ class SceneCodec {
       final isTop = top == i;
       if (link != null) {
         any = true;
-        final instance = isTop ? e.getComponent<PrefabInstanceComponent>()! : null;
+        final instance = isTop
+            ? e.getComponent<PrefabInstanceComponent>()!
+            : null;
         encoded[i]['prefabRef'] = {
           'instance': top,
           'path': link.path,
-          if (!isTop && parentLink != null && parentLink.instance == link.instance)
+          if (!isTop &&
+              parentLink != null &&
+              parentLink.instance == link.instance)
             'parent': parentLink.path,
           if (instance != null) 'block': instance.block.toJson(),
           if (instance != null && instance.missing) 'missing': instance.path,
         };
       }
       // Under an entity inside an instance, not of it.
-      if (parentLink != null && (link == null || isTop || parentLink.instance != link.instance)) {
+      if (parentLink != null &&
+          (link == null || isTop || parentLink.instance != link.instance)) {
         encoded[i]['parentInside'] = {
           'instance': index[parentLink.instance],
           'path': parentLink.path,

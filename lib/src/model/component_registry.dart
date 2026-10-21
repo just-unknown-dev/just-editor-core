@@ -13,12 +13,23 @@ class ComponentEntry {
     this.allowMultiple = false,
   });
 
+  /// The name the picker lists it by: the definition's display name, or
+  /// its type.
   final String name;
+
+  /// The heading it is listed under in the picker (`Core` when the
+  /// definition names none).
   final String group;
+
+  /// One line on what it does, for the picker; empty for none.
   final String description;
+
+  /// The definition's type: what a scene file saves the component as.
   final String? componentTypeName;
 
-  /// Whether an entity may carry more than one.
+  /// The definition's `allowMultiple` hint. An entity holds one component
+  /// per type (`Component.componentType`) whatever this says, so the picker
+  /// never offers an entry whose type the entity already has.
   final bool allowMultiple;
 
   /// Produces a new component instance with sensible editor defaults.

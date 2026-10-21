@@ -13,6 +13,8 @@ import '../editor_metrics.dart';
 class EditorLook extends StatelessWidget {
   const EditorLook({super.key, required this.child});
 
+  /// What takes the look. Inside another [EditorLook] it is left as it is,
+  /// so the text is never scaled twice.
   final Widget child;
 
   /// Tooltips as the editor draws them, and as long as the settings say.

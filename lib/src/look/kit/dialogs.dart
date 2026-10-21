@@ -16,11 +16,17 @@ class EditorAlert extends StatelessWidget {
     required this.actions,
   });
 
+  /// The dialog's title, at the top.
   final String title;
+
+  /// What it is about, under the title; ignored when [content] is given.
   final String? message;
 
   /// Anything more than a message: a field, a list.
   final Widget? content;
+
+  /// The buttons along the foot, usually [EditorButton]s, in order: the
+  /// one to press last and filled.
   final List<Widget> actions;
 
   @override
@@ -96,7 +102,13 @@ Future<bool> showEditorConfirm(
 }
 
 /// What to do with work that has not been saved.
-enum UnsavedChoice { save, discard }
+enum UnsavedChoice {
+  /// Save the work, then go on.
+  save,
+
+  /// Go on without saving: the work is lost.
+  discard,
+}
 
 /// Asks whether to save before something that would lose unsaved work:
 /// Save, Don't save, or Cancel — which is null.

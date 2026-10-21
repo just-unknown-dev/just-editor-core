@@ -30,7 +30,7 @@ void main() {
 
   test('runWithCapture records plain print output once', () async {
     final storage = _MemoryEditorLogStorage();
-    final service = EditorLogService.withStorage(storage);
+    final service = EditorLogService(storage: storage);
 
     await service.runWithCapture(() async {
       // ignore: avoid_print
@@ -52,7 +52,7 @@ void main() {
 
   test('startSession keeps pre-session entries without duplication', () async {
     final storage = _MemoryEditorLogStorage();
-    final service = EditorLogService.withStorage(storage);
+    final service = EditorLogService(storage: storage);
 
     service.log(
       'boot log before session',
@@ -169,7 +169,7 @@ void main() {
   test('a Flutter error is logged with what Flutter says about it', () async {
     // An overflow has no stack: its first line was all the log kept, and
     // never said which widget.
-    final service = EditorLogService.withStorage(_MemoryEditorLogStorage());
+    final service = EditorLogService(storage: _MemoryEditorLogStorage());
     await service.startSession(
       controller: JustDebuggerController(overlayVisible: false),
     );
@@ -216,6 +216,44 @@ void main() {
     } finally {
       await dir.delete(recursive: true);
     }
+  });
+
+  test(
+    'disposed without stopping its session, it gives the hooks back',
+    () async {
+      final before = debugPrint;
+      final beforeError = FlutterError.onError;
+      final service = EditorLogService(storage: _MemoryEditorLogStorage());
+      var heard = 0;
+      service.onError((_) => heard++);
+      await service.startSession(
+        controller: JustDebuggerController(overlayVisible: false),
+      );
+      expect(identical(debugPrint, before), isFalse, reason: 'captured');
+      service.dispose();
+      expect(identical(debugPrint, before), isTrue);
+      expect(identical(FlutterError.onError, beforeError), isTrue);
+      debugPrint('after it went');
+      expect(heard, 0);
+    },
+  );
+
+  testWidgets('lines logged in one frame are published once', (tester) async {
+    final service = EditorLogService(storage: _MemoryEditorLogStorage());
+    addTearDown(service.dispose);
+    var published = 0;
+    final stop = service.entries.watch(() => published++);
+    addTearDown(stop);
+    // A game system printing every frame, on the frame's own callback.
+    tester.binding.scheduleFrameCallback((_) {
+      for (var i = 0; i < 50; i++) {
+        service.log('line $i');
+      }
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(service.entries.value, hasLength(50));
+    expect(published, 1);
   });
 }
 

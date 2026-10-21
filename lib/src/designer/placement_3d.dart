@@ -11,8 +11,10 @@ import 'prefab_registry.dart';
 ///
 /// +Y is down: an upright thing's up is -Y.
 abstract final class Placement3D {
-  /// Up, in the engine's space.
-  static final jge.Vector3 up = jge.Vector3(0, -1, 0);
+  /// Up, in the engine's space — a fresh vector each time, so whoever is
+  /// handed it (a module's `buildAt`) may change it without changing up
+  /// for everyone after.
+  static jge.Vector3 get up => jge.Vector3(0, -1, 0);
 
   /// The turn taking direction [from] onto [to] (both unit length) the
   /// shortest way.
@@ -65,7 +67,9 @@ abstract final class Placement3D {
         );
     var transform = components.whereType<jge.TransformComponent>().firstOrNull;
     if (transform == null) {
-      transform = jge.TransformComponent(position: jge.Vector3.copy(at.position));
+      transform = jge.TransformComponent(
+        position: jge.Vector3.copy(at.position),
+      );
       components.insert(0, transform);
     } else if (prefab.buildAt == null) {
       transform.position.z = at.position.z;

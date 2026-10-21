@@ -14,7 +14,12 @@ class EditorDropdownOption<T> {
     this.detail,
   });
 
+  /// What choosing this entry gives: the value [EditorDropdown.onChanged]
+  /// is called with.
   final T value;
+
+  /// The entry's name, in the list and in the field when it is chosen; a
+  /// search matches it.
   final String label;
 
   /// A dot before the label — a tag's colour.
@@ -28,10 +33,10 @@ class EditorDropdownOption<T> {
 /// fields beside it, opening a compact list directly below.
 ///
 /// The stock Material `DropdownButton` is 48 px tall and opens *over* itself
-/// with 48 px items, which in an inspector of 28 px fields reads as a row from
-/// another application. This one matches the fields, ticks the current value,
-/// and — when [searchable] — filters as you type, which is what makes picking
-/// one entity out of a level's worth workable.
+/// with 48 px items, which in an inspector of compact fields reads as a row
+/// from another application. This one matches the fields, ticks the current
+/// value, and — when [searchable] — filters as you type, which is what makes
+/// picking one entity out of a level's worth workable.
 class EditorDropdown<T> extends StatelessWidget {
   const EditorDropdown({
     super.key,
@@ -69,7 +74,13 @@ class EditorDropdown<T> extends StatelessWidget {
 
   /// The selected value, or null to show [hint].
   final T? value;
+
+  /// The entries, in the order listed. With none, and no [customValue],
+  /// the field cannot be opened.
   final List<EditorDropdownOption<T>> options;
+
+  /// Called with the value of the entry chosen (the current one included),
+  /// or of a typed one; not called when the list is dismissed.
   final ValueChanged<T> onChanged;
 
   /// Shown, muted, when [value] is null or not among [options].
@@ -93,7 +104,11 @@ class EditorDropdown<T> extends StatelessWidget {
   /// A fixed height, for a toolbar. Null sizes it like a text field: the
   /// label plus [fieldPadding] above and below.
   final double? height;
+
+  /// Type size of the field and its list in logical pixels; 11 by default.
   final double fontSize;
+
+  /// Shown on a hover over the field; none when null.
   final String? tooltip;
 
   EditorDropdownOption<T>? get _selected {
@@ -315,6 +330,9 @@ double _naturalWidth<T>(
 /// as "dismissed" and a dropdown's value may legitimately be null-like.
 class EditorChoice<T> {
   const EditorChoice(this.value);
+
+  /// The value of the entry chosen, or the one made from typed text; null
+  /// only when `T` allows it.
   final T value;
 }
 
@@ -515,10 +533,7 @@ class _MenuBodyState<T> extends State<_MenuBody<T>> {
                     0.0,
                     math.min(
                       EditorDropdown.maxLabelWidth,
-                      box.maxWidth -
-                          16 -
-                          (color == null ? 0 : 14) -
-                          _detailGap,
+                      box.maxWidth - 16 - (color == null ? 0 : 14) - _detailGap,
                     ),
                   ),
                 ),

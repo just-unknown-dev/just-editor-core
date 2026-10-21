@@ -24,6 +24,8 @@ class TiledObjectInfo {
 
   /// Its id in the Tiled map.
   final int id;
+
+  /// Its name in Tiled; empty when it has none.
   final String name;
 
   /// Its class — Tiled's "type" before 1.9.
@@ -34,16 +36,26 @@ class TiledObjectInfo {
 
   /// Its middle, in the world. A point object's point.
   final Offset center;
+
+  /// Its width and height, in pixels as Tiled keeps them, before
+  /// [rotation]; zero for a point.
   final Size size;
 
   /// Degrees, clockwise, as Tiled keeps it.
   final double rotation;
 
+  /// Whether it is a point object: a place, with no size.
   final bool isPoint;
+
+  /// Whether it is an ellipse object, filling [size].
   final bool isEllipse;
 
-  /// Corners, relative to [center], for a polygon or polyline object.
+  /// Corners, relative to [center] and before [rotation], for a polygon
+  /// object; null for any other.
   final List<Offset>? polygon;
+
+  /// Points along a polyline object, relative to [center] and before
+  /// [rotation] like [polygon]; null for any other.
   final List<Offset>? polyline;
 
   /// For a tile object: the tile's global id in the Tiled map.
@@ -71,12 +83,15 @@ class TiledObjectMapper {
     this.order = 100,
   });
 
+  /// Names the mapper, prefixed by its module.
   final String id;
+
+  /// Lower is asked first.
   final int order;
 
-  /// Whether this mapper makes [object]: by its class, its name, its layer.
+  /// Whether this mapper makes `object`: by its class, its name, its layer.
   final bool Function(TiledObjectInfo object) matches;
 
-  /// The components of the entity [object] becomes.
+  /// The components of the entity `object` becomes.
   final List<Component> Function(TiledObjectInfo object) build;
 }

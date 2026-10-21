@@ -5,9 +5,9 @@ import 'package:just_game_engine/just_game_engine.dart';
 ///
 /// A scene can name a component its editor cannot decode: a module that is
 /// not registered this session, or one that has moved to another package.
-/// Dropping them — which is what the editor used to do — lost them for good
-/// on the next save, with nothing said. Held here instead, they are written
-/// back unchanged and reported as a problem.
+/// Dropped, they would be lost for good on the next save, with nothing
+/// said. Held here instead, they are written back unchanged and reported
+/// as a problem.
 ///
 /// One per entity, because an entity keeps one component per type and every
 /// unknown one would otherwise land on the same key.

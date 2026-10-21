@@ -53,19 +53,32 @@ class EditorSearchField extends StatefulWidget {
     this.onSubmitted,
   });
 
+  /// Called with the text at every change, and with `''` when the clear
+  /// button empties it.
   final ValueChanged<String> onChanged;
 
   /// Enter pressed in the field: do the obvious thing with what it found.
   final ValueChanged<String>? onSubmitted;
+
+  /// The text the field starts with; ignored when a [controller] is given.
   final String initial;
+
+  /// Muted text shown while the field is empty; `Search` by default.
   final String hint;
 
-  /// Null fills the width it is given.
+  /// The field's width in logical pixels, 220 by default. Null fills the
+  /// width it is given.
   final double? width;
 
   /// The field's text, when the owner wants to read or clear it.
   final TextEditingController? controller;
+
+  /// The field's focus, for an owner that moves the keyboard to it (a
+  /// find key, say); the field makes do without one when null.
   final FocusNode? focusNode;
+
+  /// Whether the field takes the keyboard when it first shows. Off by
+  /// default.
   final bool autofocus;
 
   @override
@@ -186,24 +199,41 @@ class CommitTextField extends StatefulWidget {
     this.autofocus = false,
   });
 
+  /// The text shown. A new one replaces it at once unless the field is
+  /// being typed in; then it shows when the field is left with nothing
+  /// typed.
   final String value;
+
+  /// Called with the text kept, once per change.
   final ValueChanged<String> onCommit;
 
   /// Whether typed text can be kept — a number that reads as one, say.
   /// Text it refuses is not passed to [onCommit]: the field shows what it
   /// had again. Null keeps any text.
   final bool Function(String text)? accept;
+
+  /// The text's style; primary text at 11 px when null.
   final TextStyle? style;
 
   /// [editorFieldDecoration] when null.
   final InputDecoration? decoration;
+
+  /// The keyboard a touch screen offers; plain text by default.
   final TextInputType keyboardType;
 
   /// More than one wraps a long value onto more lines; Enter still keeps
   /// it rather than starting a new line.
   final int maxLines;
+
+  /// Where the text sits in the box; the start by default.
   final TextAlign textAlign;
+
+  /// The field's focus, for an owner that moves the keyboard to it; the
+  /// field makes its own when null.
   final FocusNode? focusNode;
+
+  /// Whether the field takes the keyboard when it first shows. Off by
+  /// default.
   final bool autofocus;
 
   @override
@@ -218,12 +248,15 @@ class _CommitTextFieldState extends State<CommitTextField> {
   FocusNode get _focus => widget.focusNode ?? (_ownFocus ??= FocusNode());
 
   /// What was last kept or shown from outside: the text that is not a
-  /// change.
-  late String _kept = widget.value;
+  /// change. Set when the field is made — a lazy one first read after an
+  /// outside change took that change as what was shown, and kept the old
+  /// text over it.
+  late String _kept;
 
   @override
   void initState() {
     super.initState();
+    _kept = widget.value;
     _focus.addListener(_onFocus);
   }
 
@@ -234,11 +267,18 @@ class _CommitTextFieldState extends State<CommitTextField> {
       (oldWidget.focusNode ?? _ownFocus)?.removeListener(_onFocus);
       _focus.addListener(_onFocus);
     }
-    if (widget.value != oldWidget.value && !_focus.hasFocus) {
-      _text.text = widget.value;
-      _kept = widget.value;
+    if (widget.value != oldWidget.value) {
+      if (_focus.hasFocus) {
+        _changedOutside = true;
+      } else {
+        _text.text = widget.value;
+        _kept = widget.value;
+      }
     }
   }
+
+  // The value changed from outside while the field had the focus.
+  bool _changedOutside = false;
 
   @override
   void dispose() {
@@ -254,7 +294,17 @@ class _CommitTextFieldState extends State<CommitTextField> {
       PendingFieldEdits.join(_commit);
     } else {
       PendingFieldEdits.leave(_commit);
-      if (mounted) _commit();
+      if (!mounted) return;
+      final typed = _text.text != _kept;
+      final changedOutside = _changedOutside;
+      _changedOutside = false;
+      _commit();
+      // Nothing typed, but the value changed from outside while the field
+      // had the focus — an undo, a preview: shown now that it is left.
+      if (!typed && changedOutside && widget.value != _kept) {
+        _text.text = widget.value;
+        _kept = widget.value;
+      }
     }
   }
 

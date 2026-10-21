@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -187,8 +188,16 @@ class _IoEditorLogStorage implements EditorLogStorage {
     final Directory root;
     var folder = '.editor_logs';
     if (isTest) {
-      root = Directory.systemTemp;
-      folder = '.editor_logs_test_$_isolateTag';
+      // One folder per test isolate, inside one shared folder, so tests
+      // running side by side never write one log; folders left by runs
+      // more than a day old are removed as a new one is made, so test runs
+      // do not fill the temporary folder.
+      root = Directory(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        '.editor_logs_test',
+      );
+      folder = _isolateTag;
+      unawaited(_pruneTestLogs(root));
     } else if (Platform.isAndroid || Platform.isIOS) {
       root = await getApplicationSupportDirectory();
     } else {
@@ -201,8 +210,32 @@ class _IoEditorLogStorage implements EditorLogStorage {
   }
 }
 
+/// Removes the test log folders in [root] last written more than a day
+/// ago. Best effort: one that cannot be removed now is left for next time.
+Future<void> _pruneTestLogs(Directory root) async {
+  final cutoff = DateTime.now().subtract(const Duration(days: 1));
+  try {
+    if (!await root.exists()) return;
+    await for (final entry in root.list(followLinks: false)) {
+      if (entry is! Directory) continue;
+      try {
+        if ((await entry.stat()).modified.isBefore(cutoff)) {
+          await entry.delete(recursive: true);
+        }
+      } on FileSystemException {
+        // In use, or gone already.
+      }
+    }
+  } on FileSystemException {
+    // The folder cannot be listed: nothing to tidy.
+  }
+}
+
+/// The `dart:io` storage behind [createEditorLogStorage]: the log file.
 EditorLogStorage createEditorLogStorageImpl() => _IoEditorLogStorage();
 
+/// A storage that writes to the file at [path], for a test that wants its
+/// own log file.
 @visibleForTesting
 EditorLogStorage createEditorLogStorageForPath(String path) =>
     _IoEditorLogStorage.forPath(path);

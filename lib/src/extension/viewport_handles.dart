@@ -85,7 +85,8 @@ final class HandleDrag {
   /// Where the handle was when the drag began, in the world.
   final jge.Vector3 start;
 
-  /// Whether to snap (Ctrl held).
+  /// Whether to snap: as the host decides it — in 3-D, snapping switched
+  /// on in the editor unless Ctrl is held, or off unless it is.
   final bool snap;
 
   /// The grid step to snap to.
@@ -114,7 +115,8 @@ final class HandleDrag {
   }
 
   /// [value] on the grid when snapping.
-  double snapped(double value) => snap && grid > 0 ? (value / grid).roundToDouble() * grid : value;
+  double snapped(double value) =>
+      snap && grid > 0 ? (value / grid).roundToDouble() * grid : value;
 }
 
 /// A click on a [ViewportHandle] that did not drag.
@@ -155,7 +157,11 @@ void paintViewportHandles(
         canvas
           ..drawCircle(at, 4, active ? held : faint)
           ..drawLine(at - const Offset(2.5, 0), at + const Offset(2.5, 0), edge)
-          ..drawLine(at - const Offset(0, 2.5), at + const Offset(0, 2.5), edge);
+          ..drawLine(
+            at - const Offset(0, 2.5),
+            at + const Offset(0, 2.5),
+            edge,
+          );
       case ViewportHandleStyle.size:
         final path = Path()
           ..moveTo(at.dx, at.dy - 6)

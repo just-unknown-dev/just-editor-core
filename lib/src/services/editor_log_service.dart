@@ -11,15 +11,17 @@ import 'editor_log_storage.dart';
 
 typedef _PlatformErrorHandler = bool Function(Object error, StackTrace stack);
 
+/// The editor's log: what the Console dock lists.
+///
+/// Holds the lines the editor and its modules [log] and, while a session
+/// runs ([EditorLogSession.startSession]), every print, Flutter error and
+/// uncaught error. Keeps the newest [maxEntries], and saves each line to an
+/// [EditorLogStorage], whose lines the next session reads back.
 class EditorLogService {
   /// A log service over the platform's default storage. One per editor
   /// scope; there is no process-wide instance.
   EditorLogService({EditorLogStorage? storage})
     : _storage = storage ?? createEditorLogStorage();
-
-  @visibleForTesting
-  factory EditorLogService.withStorage(EditorLogStorage storage) =>
-      EditorLogService(storage: storage);
 
   final EditorLogStorage _storage;
   final List<EditorLogEntry> _entries = <EditorLogEntry>[];
@@ -47,6 +49,19 @@ class EditorLogService {
   bool _flushScheduled = false;
   final List<VoidCallback> _pendingNotifies = [];
 
+  // Whether the deferred flush publishes [entries]: once for every line
+  // logged during the frame, not once per line — each publish copies the
+  // whole log, up to its many thousand lines.
+  bool _publishPending = false;
+
+  bool _disposed = false;
+
+  // What this service put in place of the global hooks, to tell whether
+  // they are still its own when it goes.
+  DebugPrintCallback? _ownDebugPrint;
+  FlutterExceptionHandler? _ownFlutterError;
+  _PlatformErrorHandler? _ownPlatformError;
+
   /// Every entry, oldest first: a new list on every change, so a dock
   /// can watch it.
   final Signal<List<EditorLogEntry>> entries = Signal(
@@ -54,10 +69,10 @@ class EditorLogService {
     debugLabel: 'logEntries',
   );
 
-  void _publish() =>
-      entries.value = List<EditorLogEntry>.unmodifiable(_entries);
-
-  String? get persistencePath => _storage.filePath;
+  void _publish() {
+    if (_disposed) return;
+    entries.value = List<EditorLogEntry>.unmodifiable(_entries);
+  }
 
   // ── Frame-safe notification ────────────────────────────────────────────────
 
@@ -78,12 +93,17 @@ class EditorLogService {
   /// callback when called during a Flutter frame (e.g. from an ECS system
   /// running on the vsync Ticker).  Multiple in-frame calls are batched into
   /// one post-frame flush so only a single rebuild is scheduled.
-  void _scheduleNotify(VoidCallback work) {
+  ///
+  /// With [publish], [entries] is published after [work] — in a frame, once
+  /// at the flush however many calls asked.
+  void _scheduleNotify(VoidCallback work, {bool publish = false}) {
     if (!_isInsideFrame) {
       work();
+      if (publish) _publish();
       return;
     }
     _pendingNotifies.add(work);
+    if (publish) _publishPending = true;
     if (!_flushScheduled) {
       _flushScheduled = true;
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -93,10 +113,17 @@ class EditorLogService {
         for (final fn in pending) {
           fn();
         }
+        if (_publishPending) {
+          _publishPending = false;
+          _publish();
+        }
       });
     }
   }
 
+  /// Runs [action] with every print, Flutter error and uncaught error in
+  /// it captured into the log, whether or not a session is running.
+  @visibleForTesting
   Future<T> runWithCapture<T>(Future<T> Function() action) async {
     _keepGlobalCaptureInstalled = true;
     _installGlobalCapture();
@@ -132,7 +159,7 @@ class EditorLogService {
     return completer.future;
   }
 
-  Future<void> startSession({
+  Future<void> _startSession({
     required JustDebuggerController controller,
   }) async {
     _controller = controller;
@@ -159,7 +186,7 @@ class EditorLogService {
     );
   }
 
-  void stopSession() {
+  void _stopSession() {
     if (!_sessionActive) {
       _controller = null;
       return;
@@ -171,6 +198,14 @@ class EditorLogService {
     _controller = null;
   }
 
+  /// Adds a line to the log: [message], trimmed (an empty one is dropped),
+  /// from [source], in [category], at [level], with [details] such as a
+  /// stack trace (see [EditorLogEntry]).
+  ///
+  /// The line is saved to the storage and, with [mirrorToDebugger], shown
+  /// in the debugger's console while a session runs. An error also goes to
+  /// the [onError] listeners. Safe to call during a frame: watchers of
+  /// [entries] hear of it after the frame.
   void log(
     String message, {
     String source = 'editor',
@@ -222,30 +257,11 @@ class EditorLogService {
       if (mirrorToDebugger) {
         _controller?.log(normalized, category: source, level: level);
       }
-      _publish();
-    });
+    }, publish: true);
   }
 
-  void logProcessChunk(
-    String chunk, {
-    String source = 'codegen',
-    String category = 'process',
-  }) {
-    for (final rawLine in chunk.split(RegExp(r'\r?\n'))) {
-      final line = rawLine.trim();
-      if (line.isEmpty) {
-        continue;
-      }
-      final lower = line.toLowerCase();
-      final level = lower.contains('error')
-          ? DebuggerLogLevel.error
-          : (lower.contains('warn') || lower.contains('could not find'))
-          ? DebuggerLogLevel.warning
-          : DebuggerLogLevel.info;
-      log(line, source: source, category: category, level: level);
-    }
-  }
-
+  /// Forgets every line, here and in the debugger's console, and empties
+  /// the storage.
   Future<void> clear() async {
     _entries.clear();
     _scheduleNotify(() {
@@ -255,6 +271,8 @@ class EditorLogService {
     await _storage.clear();
   }
 
+  /// Back to a new service's state, for tests: no lines, no session, the
+  /// saved lines to be read again, and the global hooks put back.
   @visibleForTesting
   void resetForTesting() {
     _controller = null;
@@ -275,9 +293,9 @@ class EditorLogService {
     _globalCaptureInstalled = true;
 
     _previousDebugPrint = debugPrint;
-    debugPrint = (String? message, {int? wrapWidth}) {
+    debugPrint = _ownDebugPrint = (String? message, {int? wrapWidth}) {
       final normalized = message?.trim();
-      if (normalized == null || normalized.isEmpty) {
+      if (_disposed || normalized == null || normalized.isEmpty) {
         _previousDebugPrint?.call(message, wrapWidth: wrapWidth);
         return;
       }
@@ -296,8 +314,9 @@ class EditorLogService {
     };
 
     _previousFlutterError = FlutterError.onError;
-    FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.onError = _ownFlutterError = (FlutterErrorDetails details) {
       _previousFlutterError?.call(details);
+      if (_disposed) return;
       _recordUnhandledError(
         details.exception,
         details.stack,
@@ -309,11 +328,19 @@ class EditorLogService {
     };
 
     _previousPlatformError = PlatformDispatcher.instance.onError;
-    PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-      final handled = _previousPlatformError?.call(error, stack) ?? false;
-      _recordUnhandledError(error, stack, source: 'dart', category: 'uncaught');
-      return handled;
-    };
+    PlatformDispatcher.instance.onError = _ownPlatformError =
+        (Object error, StackTrace stack) {
+          final handled = _previousPlatformError?.call(error, stack) ?? false;
+          if (!_disposed) {
+            _recordUnhandledError(
+              error,
+              stack,
+              source: 'dart',
+              category: 'uncaught',
+            );
+          }
+          return handled;
+        };
   }
 
   void _restoreGlobalCapture() {
@@ -322,14 +349,24 @@ class EditorLogService {
     }
     _globalCaptureInstalled = false;
 
-    if (_previousDebugPrint != null) {
+    // Each hook goes back only while it is still this service's: one
+    // installed over it since (another editor's log) stays, and passes
+    // through this one's, which then only passes on to what it replaced.
+    if (identical(debugPrint, _ownDebugPrint)) {
       debugPrint = _previousDebugPrint!;
       _previousDebugPrint = null;
+      _ownDebugPrint = null;
     }
-    FlutterError.onError = _previousFlutterError;
-    _previousFlutterError = null;
-    PlatformDispatcher.instance.onError = _previousPlatformError;
-    _previousPlatformError = null;
+    if (identical(FlutterError.onError, _ownFlutterError)) {
+      FlutterError.onError = _previousFlutterError;
+      _previousFlutterError = null;
+      _ownFlutterError = null;
+    }
+    if (identical(PlatformDispatcher.instance.onError, _ownPlatformError)) {
+      PlatformDispatcher.instance.onError = _previousPlatformError;
+      _previousPlatformError = null;
+      _ownPlatformError = null;
+    }
   }
 
   void _recordConsoleLine(String line, {required String category}) {
@@ -433,5 +470,27 @@ class EditorLogService {
     return () => _errorListeners.remove(listener);
   }
 
-  void dispose() => entries.dispose();
+  /// Lets go of everything: the global hooks it put in place (whether or
+  /// not [EditorLogSession.stopSession] ran), its error listeners, and [entries].
+  void dispose() {
+    _restoreGlobalCapture();
+    _disposed = true;
+    _errorListeners.clear();
+    _pendingNotifies.clear();
+    _controller = null;
+    entries.dispose();
+  }
+}
+
+/// What only the editor that hosts the log does with it: start capturing
+/// for a session and stop. Exported by `host.dart`; a module only logs.
+extension EditorLogSession on EditorLogService {
+  /// Starts capturing prints, Flutter errors and uncaught errors into the
+  /// log, mirrored to [controller]; the lines of earlier sessions are read
+  /// back first, once.
+  Future<void> startSession({required JustDebuggerController controller}) =>
+      _startSession(controller: controller);
+
+  /// Stops capturing and lets go of the debugger.
+  void stopSession() => _stopSession();
 }

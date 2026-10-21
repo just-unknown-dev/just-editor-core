@@ -142,4 +142,48 @@ void main() {
     expect(controller.text, '42.5');
     expect(commits, greaterThan(0));
   });
+
+  testWidgets('a number no scene can save is put back, not kept', (
+    tester,
+  ) async {
+    for (final integer in [false, true]) {
+      final controller = TextEditingController(text: '5');
+      final focusNode = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+      var commits = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              child: ScrubbableNumberField(
+                key: ValueKey(integer),
+                label: 'X',
+                controller: controller,
+                focusNode: focusNode,
+                onCommit: () => commits++,
+                config: NumberScrubConfig(
+                  step: 1,
+                  pixelsPerStep: 10,
+                  integer: integer,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final input = find.byType(TextField);
+      for (final typed in ['1e999', 'Infinity', 'NaN', '-Infinity']) {
+        await tester.tap(input);
+        await tester.pump();
+        await tester.enterText(input, typed);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+        expect(controller.text, '5', reason: '$typed (integer: $integer)');
+      }
+      expect(commits, 0);
+      expect(tester.takeException(), isNull);
+    }
+  });
 }

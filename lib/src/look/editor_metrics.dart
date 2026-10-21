@@ -49,6 +49,7 @@ abstract final class EditorMetrics {
   /// What floats over the level — toolbars, the settings, dialogs.
   static double get radiusLg => _s.cornerRadius + 6;
 
+  /// Fully round ends, whatever the corner radius: a switch, a chip.
   static const double radiusPill = 999;
 
   // ── Spacing ────────────────────────────────────────────────────────────
@@ -56,11 +57,22 @@ abstract final class EditorMetrics {
   /// [base] as the density has it: tighter when compact.
   static double space(double base) => base * _s.compactness;
 
+  /// 2 logical pixels at the default density.
   static double get gapXs => space(2);
+
+  /// 4 logical pixels at the default density.
   static double get gapSm => space(4);
+
+  /// 6 logical pixels at the default density.
   static double get gapMd => space(6);
+
+  /// 8 logical pixels at the default density.
   static double get gapLg => space(8);
+
+  /// 12 logical pixels at the default density.
   static double get gapXl => space(12);
+
+  /// 16 logical pixels at the default density.
   static double get gapXxl => space(16);
 
   // ── Controls ───────────────────────────────────────────────────────────
@@ -78,8 +90,13 @@ abstract final class EditorMetrics {
   /// A field's height, as the inspector draws them.
   static double get fieldHeight => math.max(minTarget, 28 * _s.compactness);
 
+  /// A small icon, 12 logical pixels: one beside a line of text.
   static const double iconSm = 12;
+
+  /// A medium icon, 14 logical pixels: a workspace's title bar.
   static const double iconMd = 14;
+
+  /// A large icon, 16 logical pixels.
   static const double iconLg = 16;
 
   // ── Type, at 100% ──────────────────────────────────────────────────────

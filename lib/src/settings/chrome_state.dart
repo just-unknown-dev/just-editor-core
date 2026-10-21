@@ -5,13 +5,13 @@ import 'editor_prefs.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 /// What the editor's chrome remembers while it is open, per editor: the
-/// dragged width of the right panel, whether the settings dialog is open,
-/// and the performance history the docks chart.
+/// dragged width of the right panel and its tab, whether the settings
+/// dialog is open, which inspector cards and groups are folded, and the
+/// performance history the docks chart.
 ///
-/// Used to be library globals; the compact dock, the chrome and the right
-/// panel are parallel widgets, not parent and child, so a State field on any
-/// one of them could not reach the others. A scope service can, and two
-/// editors in one process no longer share it.
+/// A scope service: the compact dock, the chrome and the right panel are
+/// parallel widgets, not parent and child, so a State field on any one of
+/// them could not reach the others. Each editor in a process has its own.
 class EditorChromeState {
   /// True while the Keyboard settings wait for a chord to bind: every key
   /// is theirs, Esc and the settings' own chord among them.
@@ -48,6 +48,7 @@ class EditorChromeState {
     debugLabel: 'settingsOpen',
   );
 
+  /// Opens the settings dialog if it is shut, or shuts it.
   void toggleSettings() => settingsOpen.value = !settingsOpen.value;
 
   /// The right panel's tab while the Level Designer is open: the scene
@@ -57,7 +58,10 @@ class EditorChromeState {
     debugLabel: 'rightPanelTab',
   );
 
+  /// [rightPanelTab]'s value for the scene tree and inspector.
   static const String inspectorTab = 'inspector';
+
+  /// [rightPanelTab]'s value for the Level Designer's own tab.
   static const String levelTab = 'level';
 
   /// The component types whose inspector cards are folded to their header —
@@ -67,6 +71,8 @@ class EditorChromeState {
     debugLabel: 'collapsedComponents',
   );
 
+  /// Folds the inspector cards of [componentType] to their header, or opens
+  /// them if they are folded.
   void toggleCollapsed(String componentType) {
     final now = collapsedComponents.value;
     collapsedComponents.value = Set.unmodifiable(
@@ -92,6 +98,8 @@ class EditorChromeState {
     required bool startsFolded,
   }) => startsFolded != flippedGroups.value.contains('$componentType/$group');
 
+  /// Folds [group] of [componentType] if it is open, or opens it if it is
+  /// folded.
   void toggleGroup(String componentType, String group) {
     final key = '$componentType/$group';
     final now = flippedGroups.value;
@@ -100,7 +108,8 @@ class EditorChromeState {
     );
   }
 
-  /// Performance samples, kept across dock open/close.
+  /// Performance samples, oldest first and at most
+  /// [OverlayLayout.perfHistoryCapacity], kept across dock open/close.
   final List<PerfHistorySample> perfHistory = <PerfHistorySample>[];
 
   /// Appends a sample, skipping duplicates when the frame has not advanced
@@ -127,6 +136,7 @@ class EditorChromeState {
     }
   }
 
+  /// Disposes the signals; the scope calls it when it is disposed.
   void dispose() {
     rightPanelWidth.dispose();
     settingsOpen.dispose();
@@ -136,6 +146,8 @@ class EditorChromeState {
   }
 }
 
+/// One frame's performance, as [EditorChromeState.recordPerfSample] took it
+/// from the debugger, for the docks' charts.
 class PerfHistorySample {
   const PerfHistorySample({
     required this.frameNumber,
@@ -145,10 +157,19 @@ class PerfHistorySample {
     required this.rssBytes,
   });
 
+  /// The engine's frame count when the sample was taken.
   final int frameNumber;
+
+  /// Frames per second at the time.
   final int fps;
+
+  /// How long the frame's update took, in milliseconds.
   final double frameMs;
+
+  /// What was left of the frame's budget after it, in milliseconds.
   final double budgetRemainingMs;
+
+  /// The process's resident memory, in bytes; 0 when it is not reported.
   final int rssBytes;
 
   /// Frame time as a percentage of the engine's fixed frame budget — used as

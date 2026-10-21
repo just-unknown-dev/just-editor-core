@@ -9,26 +9,54 @@ import '../look/theme_controller.dart';
 import 'gizmo_settings.dart';
 import 'overlay_ui_settings.dart';
 
+/// The editor's settings in its key-value store: [OverlayUiSettings] under
+/// the [OverlaySettingsPrefKeys], each as text, beside the raw keys modules
+/// keep through `EditorPrefs`. Also turns the settings into an exported
+/// file and back.
 class OverlaySettingsStore {
-  const OverlaySettingsStore(this._storageFuture);
+  /// Works on the store the future completes with; the scope hands it the
+  /// editor's own store, opened once and shared with everything else that
+  /// keeps something in it.
+  OverlaySettingsStore(this._storageFuture);
 
   final Future<JustStandardStorage> _storageFuture;
 
-  /// The saved settings, each clamped to what the dialog allows now.
+  /// What the store holds under each key, as last read or written: a save
+  /// writes only the settings that differ from it. Each write rewrites the
+  /// store's whole file, so writing every setting for one change was some
+  /// fifty full writes.
+  Map<String, String>? _stored;
+
+  /// The saved settings, each clamped to what the dialog allows.
   ///
-  /// Keys an older editor wrote for settings that are gone — warning rules,
-  /// log line counts, an accessibility mode — are left where they are and
-  /// not read.
+  /// Keys that are not settings the editor knows are left where they are
+  /// and not read.
   Future<OverlayUiSettings> loadSettings() async {
     final values = await (await _storageFuture).readAll();
-    return decode({for (final e in values.entries) e.key: e.value.toString()});
+    final stored = _stored = {
+      for (final e in values.entries) e.key: e.value.toString(),
+    };
+    return decode(stored);
   }
 
+  /// Writes the settings that differ from what the store holds.
   Future<void> saveSettings(OverlayUiSettings settings) async {
     final storage = await _storageFuture;
-    await Future.wait(<Future<void>>[
-      for (final e in encode(settings).entries) storage.write(e.key, e.value),
-    ]);
+    final stored = _stored ??= {
+      for (final e in (await storage.readAll()).entries)
+        e.key: e.value.toString(),
+    };
+    for (final MapEntry(:key, :value) in encode(settings).entries) {
+      if (stored[key] == value) continue;
+      stored[key] = value;
+      try {
+        await storage.write(key, value);
+      } on Object {
+        // Not written: the next save tries it again.
+        stored.remove(key);
+        rethrow;
+      }
+    }
   }
 
   // ── The settings as stored ───────────────────────────────────────────────
@@ -118,14 +146,8 @@ class OverlaySettingsStore {
     var themeId = values[OverlaySettingsPrefKeys.prefThemeId];
     var accent = int.tryParse(values[OverlaySettingsPrefKeys.prefAccent] ?? '');
     if (themeId == null) {
-      // Saved before themes had ids: an index into the built-in five.
-      final index =
-          int.tryParse(
-            values[OverlaySettingsPrefKeys.prefLegacyThemePreset] ?? '',
-          ) ??
-          0;
-      final (id, _, colour) = ThemeController
-          .builtIn[index.clamp(0, ThemeController.builtIn.length - 1)];
+      // Nothing chosen yet: the first of the built-in themes.
+      final (id, _, colour) = ThemeController.builtIn.first;
       themeId = id;
       accent = colour.toARGB32();
     }
@@ -387,30 +409,8 @@ class OverlaySettingsStore {
       );
 
   /// Stores one raw value under [key].
-  Future<void> writeRaw(String key, String value) async =>
-      (await _storageFuture).write(key, value);
-
-  Future<bool> readBoolByKey(String key, {required bool fallback}) async {
-    final raw = await (await _storageFuture).read(key);
-    if (raw == null) {
-      return fallback;
-    }
-    return raw == 'true';
-  }
-
-  Future<void> writeBoolByKey(String key, bool value) async {
-    await (await _storageFuture).write(key, value.toString());
-  }
-
-  Future<int> readIntByKey(String key, {required int fallback}) async {
-    final raw = await (await _storageFuture).read(key);
-    if (raw == null) {
-      return fallback;
-    }
-    return int.tryParse(raw) ?? fallback;
-  }
-
-  Future<void> writeIntByKey(String key, int value) async {
-    await (await _storageFuture).write(key, value.toString());
+  Future<void> writeRaw(String key, String value) async {
+    await (await _storageFuture).write(key, value);
+    _stored?[key] = value;
   }
 }

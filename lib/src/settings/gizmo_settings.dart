@@ -27,11 +27,23 @@ enum GizmoMode {
 /// A kind of gizmo, turned off or on by itself: right-click the Gizmos
 /// button.
 enum GizmoKind {
+  /// The markers of cameras, lights, sounds and spawn points, where they
+  /// are.
   icons('Icons', 'Cameras, lights, sounds and spawn points, where they are'),
+
+  /// What each camera frames: its zones, bounds and track.
   cameras('Camera frames', 'What each camera frames: its zones, bounds, track'),
+
+  /// Collision shapes, coloured by their body.
   colliders('Colliders', 'Collision shapes, coloured by their body'),
+
+  /// The outline round what is selected.
   selection('Selection outline', 'The frame round what is selected'),
+
+  /// How far a selected light or sound reaches.
   reach('Light and sound reach', 'How far a selected light or sound reaches'),
+
+  /// Motion paths, and the paths, bounds and other aids a kit draws.
   aids('Paths and bounds', 'Motion paths, and a kit\'s paths, bounds and aids');
 
   const GizmoKind(this.label, this.description);
@@ -62,6 +74,7 @@ class GizmoModeSettings {
   /// Whether [kind] is drawn: gizmos shown, and that kind not turned off.
   bool shows(GizmoKind kind) => shown && !hidden.contains(kind);
 
+  /// A copy with [shown] or [hidden] changed.
   GizmoModeSettings copyWith({bool? shown, Set<GizmoKind>? hidden}) =>
       GizmoModeSettings(
         shown: shown ?? this.shown,
@@ -69,9 +82,8 @@ class GizmoModeSettings {
       );
 
   /// With [kind] turned [on] or off.
-  GizmoModeSettings withKind(GizmoKind kind, {required bool on}) => copyWith(
-    hidden: on ? ({...hidden}..remove(kind)) : {...hidden, kind},
-  );
+  GizmoModeSettings withKind(GizmoKind kind, {required bool on}) =>
+      copyWith(hidden: on ? ({...hidden}..remove(kind)) : {...hidden, kind});
 
   /// As the settings store keeps it: `on` or `off`, then any kinds turned
   /// off, `on:icons,colliders`.
@@ -130,8 +142,14 @@ class GizmoSettings {
   /// Shown in the editor; hidden in the Level Designer and a play-test.
   static const GizmoSettings defaults = GizmoSettings();
 
+  /// While editing the scene, the Level Designer closed:
+  /// [GizmoMode.editor].
   final GizmoModeSettings editor;
+
+  /// While the Level Designer is open: [GizmoMode.designer].
   final GizmoModeSettings designer;
+
+  /// During a play-test, running or paused: [GizmoMode.play].
   final GizmoModeSettings play;
 
   /// [mode]'s gizmos.

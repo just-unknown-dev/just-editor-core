@@ -27,14 +27,19 @@ class SnapRequest {
   /// Other entities' bounds to line up with.
   final Iterable<Rect> others;
 
-  /// Ruler guides: infinite vertical and horizontal lines.
+  /// Ruler guides: infinite vertical lines, by their x.
   final Iterable<double> xLines;
+
+  /// Ruler guides: infinite horizontal lines, by their y.
   final Iterable<double> yLines;
 
   /// How close counts, in world units.
   final double threshold;
 
+  /// Whether to snap along X; false leaves x where it is.
   final bool snapX;
+
+  /// Whether to snap along Y; false leaves y where it is.
   final bool snapY;
 
   /// Whether snapping to other entities is on at all.
@@ -80,6 +85,7 @@ class EntitySnapProvider extends SnapProvider {
 class GridSnapProvider extends SnapProvider {
   const GridSnapProvider([this.grid = const SquareGrid()]);
 
+  /// The shape of the cells; square unless the session says otherwise.
   final GridTopology grid;
 
   @override
@@ -99,6 +105,7 @@ class GridSnapProvider extends SnapProvider {
 
 /// The providers of one session, resolved by priority.
 class SnapResolver {
+  /// Keeps [providers] sorted by descending [SnapProvider.priority].
   SnapResolver(Iterable<SnapProvider> providers)
     : providers = List.unmodifiable(
         providers.toList()..sort((a, b) => b.priority.compareTo(a.priority)),

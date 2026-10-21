@@ -3,6 +3,7 @@
 // field that keeps what was typed exactly once.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_editor_core/host.dart';
 
@@ -113,6 +114,75 @@ void main() {
     await tester.tap(find.byType(TextField).last);
     await tester.pump();
     expect(kept, ['b']);
+  });
+
+  testWidgets('a commit field left untouched shows a value changed while it '
+      'had the focus', (tester) async {
+    final kept = <String>[];
+    var value = 'a';
+    late StateSetter set;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) {
+            set = setState;
+            return Column(
+              children: [
+                CommitTextField(value: value, onCommit: kept.add),
+                const TextField(),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    // An undo while the field has the keyboard.
+    set(() => value = 'b');
+    await tester.pump();
+    await tester.tap(find.byType(TextField).last);
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('b'), findsOneWidget);
+    expect(kept, isEmpty, reason: 'nothing was typed');
+  });
+
+  testWidgets('a click away from a field gives a workspace its keys back', (
+    tester,
+  ) async {
+    final heard = <LogicalKeyboardKey>[];
+    await tester.pumpWidget(
+      _host(
+        WorkspaceKeyScope(
+          onKey: (event) {
+            if (event is KeyDownEvent) heard.add(event.logicalKey);
+            return KeyEventResult.handled;
+          },
+          child: Column(
+            children: [
+              CommitTextField(value: 'name', onCommit: (_) {}),
+              const ColoredBox(
+                key: ValueKey('canvas'),
+                color: Color(0x00000000),
+                child: SizedBox(width: 300, height: 200),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    expect(heard, isEmpty, reason: 'typing: Delete is the field\'s');
+
+    await tester.tap(find.byKey(const ValueKey('canvas')));
+    await tester.pump();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    expect(heard, [LogicalKeyboardKey.delete]);
   });
 
   testWidgets('a toggle switches, and says what it switches', (tester) async {

@@ -97,8 +97,8 @@ class PrefabDefinition {
   /// case.
   final List<String> aliases;
 
-  /// Builds the components for one instance, sized to [size] and centred at
-  /// [position].
+  /// Builds the components for one instance, sized to `size` and centred at
+  /// `position` (world units).
   final List<jge.Component> Function(Offset position, Size size) build;
 
   /// Builds the components for one placed in space (a 3-D scene's viewport

@@ -56,6 +56,8 @@ class DesignerGuide {
 /// signals would mean a widget rebuild per frame. They stay on the canvas
 /// painting path, which is already running at frame rate.
 class LevelDesignerController {
+  /// Any of [view], [tools], [prefabs] and [sessionPrefabs] not given is
+  /// made new and empty here; the session passes the scope's.
   LevelDesignerController({
     required this.sceneState,
     required this.history,
@@ -125,7 +127,7 @@ class LevelDesignerController {
     };
   }
 
-  /// Active paint mode, when [tool] is [LevelTool.paint].
+  /// Active paint mode, when [toolId] is [BuiltInTools.paint].
   final Signal<PaintMode> paintMode = Signal(
     PaintMode.brush,
     debugLabel: 'paintMode',

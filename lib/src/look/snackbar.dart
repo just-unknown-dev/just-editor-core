@@ -10,9 +10,26 @@ import '../settings/overlay_ui_settings.dart';
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
-enum EditorSnackBarType { info, success, warning, error }
+/// What kind of message a snackbar gives: its colour and icon, and whether
+/// the Messages setting lets it show ([EditorSnackBarController.shows]).
+/// One that follows a task shows whatever its type.
+enum EditorSnackBarType {
+  /// Something merely said. Shows only when every message is shown.
+  info,
 
+  /// Something that went right. Shows only when every message is shown.
+  success,
+
+  /// Something that may go wrong. Hidden when only errors are shown.
+  warning,
+
+  /// Something that went wrong. Always shows.
+  error,
+}
+
+/// The look of an [EditorSnackBarType].
 extension EditorSnackBarTypeX on EditorSnackBarType {
+  /// The colour of the card's edge, icon and bar, from the palette in force.
   Color get accentColor => switch (this) {
     EditorSnackBarType.info => EditorTheme.info,
     EditorSnackBarType.success => EditorTheme.success,
@@ -20,6 +37,7 @@ extension EditorSnackBarTypeX on EditorSnackBarType {
     EditorSnackBarType.error => EditorTheme.error,
   };
 
+  /// The icon beside the message.
   IconData get iconData => switch (this) {
     EditorSnackBarType.info => Icons.info_outline_rounded,
     EditorSnackBarType.success => Icons.check_circle_outline_rounded,
@@ -36,7 +54,11 @@ class EditorSnackBarStep {
     this.progress,
   });
 
+  /// The line the step adds to the snackbar's step log.
   final String message;
+
+  /// The task failed at this step: the line shows in the error colour, and
+  /// the snackbar stays until it is dismissed.
   final bool isError;
 
   /// How far along the task is, 0 to 1, when it knows: the message then
@@ -65,8 +87,14 @@ class EditorSnackBarEntry {
     this.sticky = false,
   });
 
+  /// What the snackbar says, up to three lines.
   final String message;
+
+  /// A bold line over [message]; null for the message alone. The status
+  /// bar's chip shows it for a minimised snackbar.
   final String? title;
+
+  /// Its colour and icon, and whether the Messages setting lets it show.
   final EditorSnackBarType type;
 
   /// When set, a running task shows a Cancel button that calls this.
@@ -76,8 +104,8 @@ class EditorSnackBarEntry {
   /// say — rather than going after [duration].
   final bool sticky;
 
-  /// How long a message-only snackbar stays. Ignored when [progressStream]
-  /// is provided.
+  /// How long a message-only snackbar stays, longer with the Longer timings
+  /// setting. Ignored when [progressStream] is provided or [sticky] is set.
   final Duration duration;
 
   /// When non-null the snackbar follows a task: each emitted
@@ -92,11 +120,32 @@ class EditorSnackBarEntry {
 class EditorSnack {
   EditorSnack._(this.entry, this._controller);
 
+  /// What was asked to be shown.
   final EditorSnackBarEntry entry;
   final EditorSnackBarController _controller;
 
   final List<EditorSnackBarStep> _steps = [];
+
+  /// The task's latest steps, oldest first: at most [maxSteps], the ones
+  /// before counted in [earlierSteps].
   List<EditorSnackBarStep> get steps => List.unmodifiable(_steps);
+
+  /// How many steps a snackbar keeps to show. A task that reports one step
+  /// per file would otherwise draw thousands of rows on every update.
+  static const int maxSteps = 100;
+
+  /// How many steps went before [steps], no longer kept.
+  int get earlierSteps => _earlierSteps;
+  int _earlierSteps = 0;
+
+  void _addStep(EditorSnackBarStep step) {
+    _steps.add(step);
+    if (_steps.length > maxSteps) {
+      final over = _steps.length - maxSteps;
+      _steps.removeRange(0, over);
+      _earlierSteps += over;
+    }
+  }
 
   /// The task has finished — or there never was one.
   bool get isDone => _done;
@@ -110,6 +159,8 @@ class EditorSnack {
   bool get isMinimized => _minimized;
   bool _minimized = false;
 
+  /// It follows a task: its entry has an
+  /// [EditorSnackBarEntry.progressStream].
   bool get hasProgress => entry.progressStream != null;
 
   /// The task is still going.
@@ -150,7 +201,7 @@ class EditorSnack {
             _steps.last.message == step.message) {
           _steps[_steps.length - 1] = step;
         } else {
-          _steps.add(step);
+          _addStep(step);
         }
         if (step.isError) _failed = true;
         _controller._publish();
@@ -166,7 +217,7 @@ class EditorSnack {
         }
       },
       onError: (Object err) {
-        _steps.add(EditorSnackBarStep(message: 'Error: $err', isError: true));
+        _addStep(EditorSnackBarStep(message: 'Error: $err', isError: true));
         _done = true;
         _failed = true;
         _controller._publish();
@@ -184,6 +235,11 @@ class EditorSnack {
 
 // ── Controller ────────────────────────────────────────────────────────────────
 
+/// The snackbars of one editor: shows, minimises and dismisses them.
+///
+/// [EditorMessenger] makes one and hands it out through
+/// [EditorMessenger.of]; [EditorSnackBarLayer] and [MinimizedSnacksChip]
+/// draw what it holds.
 class EditorSnackBarController {
   /// Every snackbar not yet dismissed, oldest first.
   final Signal<List<EditorSnack>> snacks = Signal(
@@ -228,18 +284,24 @@ class EditorSnackBarController {
     if (!shows(entry, EditorMetrics.settings.messageLevel)) return snack;
     snacks.value = List.unmodifiable([...snacks.value, snack]);
     snack._start();
-    _makeRoom();
+    _makeRoom(keep: snack);
     return snack;
   }
 
   /// Too many showing: the oldest message goes, or — when every one tracks
-  /// a task — the oldest is minimised, its task still followed.
-  void _makeRoom() {
+  /// a task — the oldest is minimised, its task still followed. [keep], the
+  /// one just shown, is never what makes room: a save that failed while
+  /// three tasks were showing must still be read.
+  void _makeRoom({EditorSnack? keep}) {
     var showing = visible;
     while (showing.length > maxVisible) {
-      final oldest = showing.firstWhere(
+      final older = [
+        for (final s in showing)
+          if (!identical(s, keep)) s,
+      ];
+      final oldest = older.firstWhere(
         (s) => !s.hasProgress,
-        orElse: () => showing.first,
+        orElse: () => older.first,
       );
       if (oldest.hasProgress) {
         oldest._minimized = true;
@@ -290,6 +352,8 @@ class EditorSnackBarController {
     if (!_disposed) snacks.value = List.unmodifiable(snacks.value);
   }
 
+  /// Stops following every snackbar's task and timer, and disposes
+  /// [snacks]. [EditorMessenger] calls it when it goes.
   void dispose() {
     _disposed = true;
     for (final s in snacks.value) {
@@ -308,8 +372,11 @@ class EditorSnackBarController {
 class EditorMessenger extends StatefulWidget {
   const EditorMessenger({super.key, required this.child});
 
+  /// The subtree that shows messages through this: the editor overlay.
   final Widget child;
 
+  /// The controller of the nearest [EditorMessenger] above [context]. There
+  /// must be one: debug builds assert it.
   static EditorSnackBarController of(BuildContext context) {
     final inherited = context
         .dependOnInheritedWidgetOfExactType<_EditorSnackBarScope>();
@@ -638,6 +705,19 @@ class _SnackCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (snack.earlierSteps > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                '${snack.earlierSteps} earlier '
+                                '${snack.earlierSteps == 1 ? 'step' : 'steps'}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: EditorTheme.textMuted,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
                           for (final s in steps) _SnackStepRow(step: s),
                         ],
                       ),

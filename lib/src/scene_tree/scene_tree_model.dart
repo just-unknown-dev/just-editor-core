@@ -1,10 +1,8 @@
 /// What the scene tree shows, worked out once instead of in `build`.
 ///
-/// The old panel walked the world, built a children map, sorted roots and
-/// decided depths every time anything at all changed, inside the widget
-/// that drew them. Everything a row needs is settled here, where it can be
-/// read and tested without a widget in sight, and the panel is left to
-/// draw a flat list.
+/// Everything a row needs — children, root order, depth, what a filter
+/// keeps — is settled here, where it can be read and tested without a
+/// widget in sight, and the panel is left to draw a flat list.
 library;
 
 import 'package:just_game_engine/just_game_engine.dart' as jge;
@@ -37,13 +35,18 @@ class TreeFilter {
   /// [tags] and [tag] together.
   Set<String> get wantedTags => {...tags, if (tag.isNotEmpty) tag};
 
+  /// A render layer's id ([jge.LayerComponent.layerId]): only entities on
+  /// it are kept. Empty for any layer.
   final String layer;
 
   /// Only entities something is wrong with.
   final bool problems;
 
+  /// No filter: every entity is listed.
   static const TreeFilter none = TreeFilter();
 
+  /// Whether the filter narrows nothing: no text, component type, tag,
+  /// layer or problems.
   bool get isEmpty =>
       text.trim().isEmpty &&
       componentType.isEmpty &&
@@ -52,6 +55,7 @@ class TreeFilter {
       layer.isEmpty &&
       !problems;
 
+  /// A copy with the given fields replaced.
   TreeFilter copyWith({
     String? text,
     String? componentType,
@@ -135,12 +139,18 @@ class TreeRow {
   /// The map layer this row is, or null for the entity itself.
   final MapTreeItem? item;
 
+  /// Whether this row is a level map's layer ([item]) rather than an
+  /// entity.
   bool get isMapItem => item != null;
 
   /// How far in it is drawn.
   final int depth;
 
+  /// Whether anything is listed under it — children, or a level map's
+  /// layers; under a filter, only what the filter keeps.
   final bool hasChildren;
+
+  /// Whether what is under it is listed; always true under a filter.
   final bool isExpanded;
 
   /// Whether it is one of the things a filter was looking for. A row that
@@ -150,6 +160,7 @@ class TreeRow {
   /// Whether the game made it while playing, rather than the scene.
   final bool isRuntime;
 
+  /// The id of [entity]: for a map layer's row, the map's.
   jge.EntityId get id => entity.id;
 
   @override
@@ -159,28 +170,21 @@ class TreeRow {
       '${isRuntime ? ', runtime' : ''})';
 }
 
-/// The divider between the scene's entities and the ones a running game
-/// made. Not an entity, so the tree carries it as a row with none.
-class TreeSection {
-  const TreeSection(this.label, this.index);
-
-  final String label;
-
-  /// Where it sits in the row list; the row after it is the first one
-  /// under it.
-  final int index;
-}
-
 /// The rows to draw, and where the runtime section begins.
 class SceneTree {
   const SceneTree({required this.rows, this.runtimeAt});
 
+  /// Every row to draw, top to bottom: the scene's, then from [runtimeAt]
+  /// the ones the running game made.
   final List<TreeRow> rows;
 
   /// The index the runtime rows start at, or null when there are none.
   final int? runtimeAt;
 
+  /// Whether there are no rows.
   bool get isEmpty => rows.isEmpty;
+
+  /// How many rows there are.
   int get length => rows.length;
 
   /// Where [id]'s own row is in [rows], or -1.
@@ -191,9 +195,11 @@ class SceneTree {
   int indexOfItem(jge.EntityId id, MapTreeItem item) =>
       rows.indexWhere((r) => r.id == id && r.item == item);
 
+  /// A tree with no rows.
   static const SceneTree empty = SceneTree(rows: []);
 }
 
+/// Works out the scene tree's rows from a world: [build].
 abstract final class SceneTreeModel {
   /// The rows for [world].
   ///
@@ -253,15 +259,17 @@ abstract final class SceneTreeModel {
 
     // The roots: what the editor's order says first, then anything else.
     final roots = <jge.Entity>[];
+    // Beside the list, so asking whether one is in already costs nothing:
+    // a tree with thousands of roots is built on every redraw.
+    final rooted = <jge.EntityId>{};
     for (final id in rootOrder) {
       final entity = live[id];
       if (entity == null || claimed.contains(id)) continue;
-      roots.add(entity);
+      if (rooted.add(id)) roots.add(entity);
     }
     for (final entity in live.values) {
       if (claimed.contains(entity.id)) continue;
-      if (roots.any((r) => r.id == entity.id)) continue;
-      roots.add(entity);
+      if (rooted.add(entity.id)) roots.add(entity);
     }
 
     final filtering = !filter.isEmpty;

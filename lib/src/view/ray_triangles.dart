@@ -28,18 +28,26 @@ abstract final class RayTriangles {
     for (var i = 0; i + 2 < idx.length; i += 3) {
       final a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
       // Möller–Trumbore.
-      final e1x = p[b] - p[a], e1y = p[b + 1] - p[a + 1], e1z = p[b + 2] - p[a + 2];
-      final e2x = p[c] - p[a], e2y = p[c + 1] - p[a + 1], e2z = p[c + 2] - p[a + 2];
+      final e1x = p[b] - p[a],
+          e1y = p[b + 1] - p[a + 1],
+          e1z = p[b + 2] - p[a + 2];
+      final e2x = p[c] - p[a],
+          e2y = p[c + 1] - p[a + 1],
+          e2z = p[c + 2] - p[a + 2];
       final px = direction.y * e2z - direction.z * e2y;
       final py = direction.z * e2x - direction.x * e2z;
       final pz = direction.x * e2y - direction.y * e2x;
       final det = e1x * px + e1y * py + e1z * pz;
       if (det.abs() < 1e-12) continue;
       final inv = 1 / det;
-      final tx = origin.x - p[a], ty = origin.y - p[a + 1], tz = origin.z - p[a + 2];
+      final tx = origin.x - p[a],
+          ty = origin.y - p[a + 1],
+          tz = origin.z - p[a + 2];
       final u = (tx * px + ty * py + tz * pz) * inv;
       if (u < 0 || u > 1) continue;
-      final qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+      final qx = ty * e1z - tz * e1y,
+          qy = tz * e1x - tx * e1z,
+          qz = tx * e1y - ty * e1x;
       final v = (direction.x * qx + direction.y * qy + direction.z * qz) * inv;
       if (v < 0 || u + v > 1) continue;
       final t = (e2x * qx + e2y * qy + e2z * qz) * inv;

@@ -7,7 +7,11 @@ import '../designer/designer_session.dart';
 class PrefabCategory {
   const PrefabCategory({required this.label, this.order = 100});
 
+  /// The group's heading in the palette, and what a prefab gives as its
+  /// category to be in it.
   final String label;
+
+  /// Lower sorts first; the built-in groups use 0–99.
   final int order;
 }
 
@@ -19,11 +23,14 @@ class StatusBarControl {
     this.order = 100,
   });
 
+  /// Names the control, prefixed by its module.
   final String id;
 
   /// Lower sorts first; the built-ins occupy 0–99.
   final int order;
 
+  /// Builds the control, placed after the built-in ones on the status bar,
+  /// which scrolls sideways when they do not all fit.
   final Widget Function(BuildContext context, DesignerSession session) build;
 }
 
@@ -39,7 +46,11 @@ class SidePanelSection {
     this.groups,
   });
 
+  /// Names the section, prefixed by its module.
   final String id;
+
+  /// The section's heading, drawn in capitals; the panel keeps whether the
+  /// section is open or shut by it.
   final String title;
 
   /// The tool groups ([LevelToolHandler.group]) it opens for — its tools'
@@ -54,5 +65,6 @@ class SidePanelSection {
   /// prefab palette does, rather than its own height.
   final bool expand;
 
+  /// Builds the section's content, shown while it is open.
   final Widget Function(BuildContext context, DesignerSession session) build;
 }

@@ -4,6 +4,7 @@ import 'package:just_game_engine/just_game_engine.dart' as jge;
 import '../../model/editor_scene_state.dart';
 import '../../model/editor_commands.dart';
 import '../../model/editor_history.dart';
+import '../../model/editor_keys.dart';
 import 'level_tool.dart';
 
 /// Tells [PathTool] which component on an entity owns a path, and how to read
@@ -24,7 +25,7 @@ class PathBinding {
     this.tooFewPointsMessage = 'A path needs at least two points',
   });
 
-  /// Finds the path-owning component on [entity], or null if it has none.
+  /// Finds the path-owning component on `entity`, or null if it has none.
   final jge.Component? Function(jge.Entity entity) resolve;
 
   /// Reads the current waypoints.
@@ -56,6 +57,11 @@ class PathBinding {
 /// Drag an existing point to move it, click empty space to append one,
 /// Ctrl+click a point to delete it.
 class PathTool extends LevelToolHandler {
+  /// A path tool for [binding]'s paths. The rest set how the strip shows
+  /// it: by default id `path`, labelled Path, on no key (give it one that
+  /// the tools beside it leave free — W, E and R are Move, Scale and
+  /// Rotate), at order 40 in [ToolGroups.select], with a description of its
+  /// clicks.
   PathTool({
     required this.sceneState,
     required this.history,
@@ -63,7 +69,7 @@ class PathTool extends LevelToolHandler {
     String id = 'path',
     String label = 'Path',
     IconData icon = Icons.route,
-    String? shortcut = 'E',
+    String? shortcut,
     String? description,
     int order = 40,
     String group = ToolGroups.select,
@@ -106,7 +112,9 @@ class PathTool extends LevelToolHandler {
 
   @override
   String? get description =>
-      _description ?? 'Drag waypoints; click to add, Ctrl+click to remove';
+      _description ??
+      'Drag waypoints; click to add, '
+          '${EditorKeys.withPrimary('click')} to remove';
 
   @override
   int get order => _order;
@@ -114,10 +122,12 @@ class PathTool extends LevelToolHandler {
   @override
   String get group => _group;
 
-  /// How close, in world units, a click must be to grab a waypoint.
+  /// How close, in screen pixels, a click must be to grab a waypoint — the
+  /// same reach at any zoom.
   static const double grabRadius = 18.0;
 
   jge.Component? _target;
+  jge.Entity? _entity;
   int _pointIndex = -1;
   List<Offset> _before = const [];
 
@@ -130,9 +140,16 @@ class PathTool extends LevelToolHandler {
     }
 
     _target = target;
+    _entity = sceneState.selectedEntity.value;
     _before = List.of(binding.read(target));
+    // Every click is its own step: five waypoints added are five undos.
+    history.breakMerge();
 
-    final index = _pointNear(target, context.worldPosition);
+    final index = _pointNear(
+      target,
+      context.worldPosition,
+      context.pixels(grabRadius),
+    );
 
     if (index >= 0 && context.isCtrlDown) {
       if (_before.length <= binding.minimumPoints) {
@@ -195,6 +212,7 @@ class PathTool extends LevelToolHandler {
 
   void _reset() {
     _target = null;
+    _entity = null;
     _pointIndex = -1;
     _before = const [];
   }
@@ -213,6 +231,9 @@ class PathTool extends LevelToolHandler {
       ComponentFieldCommand(
         label: label,
         component: target,
+        // Found again by its entity when undone: a Stop, or a delete
+        // undone, puts a fresh instance in its place.
+        entity: _entity,
         write: (component, value) => binding.write(
           component,
           List<Offset>.of((value as List?)?.cast<Offset>() ?? const []),
@@ -230,10 +251,10 @@ class PathTool extends LevelToolHandler {
     return binding.resolve(selected);
   }
 
-  int _pointNear(jge.Component component, Offset point) {
+  int _pointNear(jge.Component component, Offset point, double reach) {
     final points = binding.read(component);
     for (var i = 0; i < points.length; i++) {
-      if ((points[i] - point).distance <= grabRadius) return i;
+      if ((points[i] - point).distance <= reach) return i;
     }
     return -1;
   }

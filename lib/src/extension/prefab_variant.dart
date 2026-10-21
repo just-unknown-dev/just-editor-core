@@ -32,7 +32,7 @@ final class PrefabVariant {
   /// Where its prefabs are listed: `Solid shapes`.
   final String category;
 
-  /// Whether a prefab whose components are [components] has this variant.
+  /// Whether a prefab whose components are `components` has this variant.
   final bool Function(List<jge.Component> components) appliesTo;
 
   /// The components it adds, fresh each call.
@@ -46,7 +46,9 @@ final class PrefabVariant {
 
   /// Whether [prefab] has this variant: built once, its components asked.
   bool offersFor(PrefabDefinition prefab) => appliesTo(
-    prefab.buildAt?.call(SurfacePoint(jge.Vector3.zero(), jge.Vector3(0, -1, 0))) ??
+    prefab.buildAt?.call(
+          SurfacePoint(jge.Vector3.zero(), jge.Vector3(0, -1, 0)),
+        ) ??
         prefab.build(Offset.zero, prefab.defaultSize),
   );
 

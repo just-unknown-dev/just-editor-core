@@ -3,8 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
-import 'grid/square_grid.dart';
-
 /// Integer grid coordinate.
 ///
 /// A dedicated value type rather than a record so it has stable equality and
@@ -31,13 +29,28 @@ class Point2 {
 
 /// One of the eight resize handles on a selection's bounds.
 enum ResizeHandle {
+  /// The top-left corner.
   topLeft(-1, -1),
+
+  /// The middle of the top edge.
   top(0, -1),
+
+  /// The top-right corner.
   topRight(1, -1),
+
+  /// The middle of the right edge.
   right(1, 0),
+
+  /// The bottom-right corner.
   bottomRight(1, 1),
+
+  /// The middle of the bottom edge.
   bottom(0, 1),
+
+  /// The bottom-left corner.
   bottomLeft(-1, 1),
+
+  /// The middle of the left edge.
   left(-1, 0);
 
   const ResizeHandle(this.x, this.y);
@@ -119,8 +132,8 @@ abstract final class DesignerGeometry {
       entity?.world?.context.definitions ?? _core;
 
   /// The engine's own definitions, for components in no world. Never
-  /// registered into.
-  static final jge.ComponentDefinitionRegistry _core =
+  /// registered into; made when asked, so a hot reload's are the ones used.
+  static jge.ComponentDefinitionRegistry get _core =>
       jge.ComponentDefinitionRegistry.core();
 
   /// The unscaled size implied by [entity]'s components, largest wins.
@@ -262,38 +275,6 @@ abstract final class DesignerGeometry {
     }
     return union;
   }
-
-  // ── Cells: the square grid, kept as the shorthand tests and tools used ──
-  //
-  // A designer session asks its `GridTopology` instead; these are that
-  // topology when it is the default square one.
-
-  static const SquareGrid _square = SquareGrid();
-
-  /// The square cell containing [world]. See [GridTopology.cellAt].
-  static Point2 cellAt(Offset world, double cellSize) =>
-      _square.cellAt(world, cellSize);
-
-  /// Every square cell touched by [rect]. See [GridTopology.cellsIn].
-  static Set<Point2> cellsIn(Rect rect, double cellSize) =>
-      _square.cellsIn(rect, cellSize);
-
-  /// A bucket fill on the square grid. See [GridTopology.floodFill].
-  static Set<Point2>? floodFill(
-    Point2 start,
-    Set<Point2> blocked, {
-    required Rect limit,
-    int maxCells = 20000,
-  }) => _square.floodFill(start, blocked, limit: limit, maxCells: maxCells);
-
-  /// The cells of a [size]×[size] brush centred on [cell].
-  static Iterable<Point2> brushCells(Point2 cell, int size) =>
-      _square.brush(cell, size);
-
-  /// Merges occupied square cells into as few rectangles as possible, in
-  /// cell coordinates. See [SquareGrid.mergeCells].
-  static List<Rect> greedyMerge(Set<Point2> cells) =>
-      SquareGrid.mergeCells(cells);
 
   /// [point] turned [quarterTurns] quarter turns about [pivot], clockwise on
   /// screen (where +Y is down). Exact: no trigonometry, so a row of platforms

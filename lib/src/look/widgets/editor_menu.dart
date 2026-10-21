@@ -103,7 +103,6 @@ PopupMenuDivider editorMenuDivider() => PopupMenuDivider(
   color: EditorTheme.textPrimary.withValues(alpha: 0.10),
 );
 
-/// Opens [items] at the global point [at].
 /// Opens [items] [gap] below the widget [anchor] is the context of: from
 /// its left edge, or — where there is no room to the right — its right
 /// edge, so a menu from a button at the end of a row opens inward instead
@@ -137,6 +136,7 @@ Future<T?> showEditorMenuBelow<T>(
   );
 }
 
+/// Opens [items] at the global point [at], in the editor's colours.
 Future<T?> showEditorMenu<T>(
   BuildContext context,
   Offset at,

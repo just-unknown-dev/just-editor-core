@@ -90,19 +90,28 @@ class EditorSceneState {
   /// since been destroyed or given a parent.
   final List<EntityId> _rootOrder = [];
 
+  /// Entities destroyed and made again under a new id — a delete undone, a
+  /// create redone, an entity play destroyed that Stop put back — by the id
+  /// they had. See [entityRebuilt].
+  final Map<EntityId, Entity> _rebuilt = {};
+
   // Mirrors multiSelectedIds so toggleMultiSelect can promote a new primary
   // Entity object (not just an id) when the current primary is deselected.
   final Map<EntityId, Entity> _multiSelectedEntities = {};
 
   // ── Derived reads ────────────────────────────────────────────────────────
 
+  /// Whether a scene is open ([activeScene] is set).
   bool get hasScene => activeScene.value != null;
 
   /// `true` when two or more entities are selected simultaneously.
   bool get hasMultiSelection => multiSelectedIds.value.length > 1;
 
+  /// Whether [id] is in the selection ([multiSelectedIds]), the primary
+  /// included.
   bool isInMultiSelection(EntityId id) => multiSelectedIds.value.contains(id);
 
+  /// Whether components have been copied for paste ([clipboard]).
   bool get hasClipboard => clipboard.value != null;
 
   /// Whether anything at all is selected.
@@ -152,6 +161,7 @@ class EditorSceneState {
       _rootOrder
         ..clear()
         ..addAll(rootOrder);
+      _rebuilt.clear();
       selectedEntity.value = null;
       _multiSelectedEntities.clear();
       _setMultiSelection(const []);
@@ -166,6 +176,7 @@ class EditorSceneState {
       activeScene.value = null;
       sceneMode.value = SceneMode.twoD;
       _rootOrder.clear();
+      _rebuilt.clear();
       selectedEntity.value = null;
       _multiSelectedEntities.clear();
       _setMultiSelection(const []);
@@ -176,6 +187,8 @@ class EditorSceneState {
 
   // ── Selection ────────────────────────────────────────────────────────────
 
+  /// Selects [entity] alone, as the primary; nothing changes when
+  /// [canSelect] refuses it.
   void selectEntity(Entity entity) {
     if (!canSelect(entity)) return;
     if (selectedEntity.value?.id == entity.id && !hasMultiSelection) {
@@ -190,7 +203,8 @@ class EditorSceneState {
     });
   }
 
-  /// Toggles [entity] in/out of the multi-selection (Shift+click behaviour).
+  /// Toggles [entity] in/out of the multi-selection (Ctrl+click, Cmd+click
+  /// on macOS).
   ///
   /// If nothing is selected, falls back to normal single selection.
   /// Removing the primary entity makes the next remaining entity the primary.
@@ -256,6 +270,7 @@ class EditorSceneState {
     });
   }
 
+  /// Deselects everything, the primary included.
   void clearSelection() {
     if (!hasAnySelection) return;
     batch(() {
@@ -269,8 +284,14 @@ class EditorSceneState {
 
   /// The scene's top-level entities, in the order they are shown and
   /// saved. [world] is asked which of them are still roots.
+  ///
+  /// What is read is also what is kept: the remembered order drops what
+  /// was destroyed or given a parent and takes in what it had not seen, so
+  /// the positions [moveRoot] and [rootIndexOf] count in are the ones the
+  /// tree shows.
   List<EntityId> rootOrder(World world) {
     final live = <EntityId>[];
+    final seen = <EntityId>{};
     for (final id in _rootOrder) {
       final entity = world.getEntity(id);
       // Alive, not enabled: an entity switched off is still in the
@@ -279,30 +300,106 @@ class EditorSceneState {
       // back at the end — so switching a row off sent it to the bottom.
       if (entity == null || !entity.isAlive) continue;
       if (entity.getComponent<ParentComponent>()?.parentId != null) continue;
-      live.add(id);
+      if (seen.add(id)) live.add(id);
     }
     // Anything the editor never saw created — a scene loaded around it, a
     // system's own entity — goes last rather than being left out.
     for (final entity in world.entities) {
       if (!entity.isAlive) continue;
       if (entity.getComponent<ParentComponent>()?.parentId != null) continue;
-      if (!live.contains(entity.id)) live.add(entity.id);
+      if (seen.add(entity.id)) live.add(entity.id);
     }
+    _rootOrder
+      ..clear()
+      ..addAll(live);
     return live;
   }
 
-  /// Puts [id] at [index] among the roots. Used by the reorder command.
-  void moveRoot(EntityId id, int index) {
+  /// Drops from the remembered order what [world] no longer has as a root:
+  /// destroyed, or given a parent by something other than the editor.
+  /// What was never seen is not added — it can only be at the end, after
+  /// every position counted here.
+  void _pruneRoots(World world) => _rootOrder.removeWhere((id) {
+    final entity = world.getEntity(id);
+    return entity == null ||
+        !entity.isAlive ||
+        entity.getComponent<ParentComponent>()?.parentId != null;
+  });
+
+  /// Puts [id] at [index] among the roots of [world], counted as the tree
+  /// shows them ([rootOrder]). Used by the hierarchy commands.
+  void moveRoot(EntityId id, int index, {required World world}) {
+    _pruneRoots(world);
     _rootOrder.remove(id);
     _rootOrder.insert(index.clamp(0, _rootOrder.length), id);
     _edited();
   }
 
-  /// Where [id] sits among the roots, or -1.
-  int rootIndexOf(EntityId id) => _rootOrder.indexOf(id);
+  /// Where [id] sits among the roots of [world], counted as the tree shows
+  /// them ([rootOrder]), or -1.
+  int rootIndexOf(EntityId id, {required World world}) {
+    _pruneRoots(world);
+    return _rootOrder.indexOf(id);
+  }
 
+  /// Takes [id] out of the top-level order: it is being given a parent, or
+  /// is about to be put somewhere else ([moveRoot]).
+  void forgetRoot(EntityId id) => _rootOrder.remove(id);
+
+  // ── Rebuilt entities ─────────────────────────────────────────────────────
+
+  /// Records that the entity that had the id [was] has been destroyed and
+  /// made again as [now].
+  ///
+  /// A world never gives an id out twice, so an undo that brings a deleted
+  /// entity back — or a Stop that puts back one play destroyed — makes it
+  /// under a new one. Commands keep the entity or id they were made with
+  /// and ask [liveEntity] or [currentId] for what it is now, so a move, a
+  /// rename or an edit recorded before the rebuild still reaches it. It
+  /// also keeps its place among the roots.
+  void entityRebuilt(EntityId was, Entity now) {
+    if (was == now.id) return;
+    _rebuilt[was] = now;
+    final at = _rootOrder.indexOf(was);
+    if (at >= 0) {
+      if (_rootOrder.contains(now.id)) {
+        _rootOrder.removeAt(at);
+      } else {
+        _rootOrder[at] = now.id;
+      }
+    }
+  }
+
+  /// The id the entity that had [id] has now: [id] itself unless it was
+  /// rebuilt ([entityRebuilt]) — then the id of what it was rebuilt as.
+  EntityId currentId(EntityId id) {
+    var current = id;
+    // Bounded: ids only ever grow, so the chain cannot loop, but nothing
+    // here should be able to hang the editor if it did.
+    for (var steps = 0; steps <= _rebuilt.length; steps++) {
+      final next = _rebuilt[current];
+      if (next == null) return current;
+      current = next.id;
+    }
+    return current;
+  }
+
+  /// [entity] while it lives, else what it was rebuilt as
+  /// ([entityRebuilt]) while that lives; null when it is gone.
+  Entity? liveEntity(Entity entity) {
+    if (entity.isAlive) return entity;
+    var next = _rebuilt[entity.id];
+    for (var steps = 0; next != null && steps <= _rebuilt.length; steps++) {
+      if (next.isAlive) return next;
+      next = _rebuilt[next.id];
+    }
+    return null;
+  }
+
+  /// Marks the scene as having unsaved changes ([isDirty]).
   void markDirty() => isDirty.value = true;
 
+  /// Marks the scene as having no unsaved changes, as after a save.
   void markClean() => isDirty.value = false;
 
   /// Tells every view of the world to redraw, without changing the dirty
@@ -310,17 +407,8 @@ class EditorSceneState {
   /// that no other signal captures.
   void refresh() => revision.value++;
 
-  /// Set by [JustGameEditorPlugin] to re-register game custom components after
-  /// a component refresh or hot-reload.
-  VoidCallback? onComponentsRefreshed;
-
-  /// Triggers a custom-component re-registration (e.g. after component refresh
-  /// completes) and then rebuilds the UI.
-  void reloadCustomComponents() {
-    onComponentsRefreshed?.call();
-    refresh();
-  }
-
+  /// Sets whether transform edits snap ([gridSnappingEnabled]) and the
+  /// grid's cell size in world units; a [gridSize] of zero or less is 32.
   void setGridSnapping({required bool enabled, required double gridSize}) {
     batch(() {
       gridSnappingEnabled.value = enabled;
@@ -346,27 +434,15 @@ class EditorSceneState {
   void _settle(Entity entity) =>
       entity.world?.transformHierarchy.propagateFrom(entity);
 
-  /// Translate [entity] by [delta] in world space.
-  void applyTranslation(Entity entity, Offset delta) {
-    final transform = entity.getComponent<TransformComponent>();
-    if (transform == null) return;
-    _settle(entity);
-    transform.translateXY(delta.dx, delta.dy);
-    if (gridSnappingEnabled.value) {
-      final snapped = _snapPosition(transform.position.toOffset());
-      transform.setPositionXY(snapped.dx, snapped.dy);
-    }
-    _settle(entity);
-    _edited();
-  }
-
-  /// What a snapped scale moves in — 0.1 is 10 % — and a snapped turn, in
-  /// radians. Set from the settings; snapping itself is
-  /// [gridSnappingEnabled].
+  /// What a snapped scale moves in — 0.1 is 10 %. Set from the settings;
+  /// snapping itself is [gridSnappingEnabled].
   double scaleStep = 0.1;
 
   /// What moving snaps in, in world units; 0 is [gridSize].
   double moveStep = 0;
+
+  /// What a snapped turn moves in, in radians: 15° unless the settings say
+  /// otherwise. See [snapRotation].
   double rotationStep = 0.2617993877991494; // 15°
 
   /// [radians] on the nearest [rotationStep] while snapping.
@@ -384,33 +460,6 @@ class EditorSceneState {
     _settle(entity);
     _edited();
   }
-
-  /// Scale [entity] by a multiplicative [factor] on both axes.
-  ///
-  /// Clamped to [0.01, 50.0] — without this, a corner-scale gizmo drag that
-  /// passes exactly through the entity's pivot yields `factor == 0`, which
-  /// would permanently zero the scale (0 * anything stays 0 on every
-  /// subsequent drag).
-  void applyScale(Entity entity, double factor) {
-    final transform = entity.getComponent<TransformComponent>();
-    if (transform == null) return;
-    _settle(entity);
-    transform.scale.x = (transform.scale.x * factor).clamp(0.01, 50.0);
-    transform.scale.y = (transform.scale.y * factor).clamp(0.01, 50.0);
-    if (gridSnappingEnabled.value) {
-      transform.scale.x = _snapScale(transform.scale.x);
-      transform.scale.y = _snapScale(transform.scale.y);
-    }
-    _settle(entity);
-    _edited();
-  }
-
-  /// Called after an edit made straight on [entity]'s components (the
-  /// inspector, a designer tool), for anything that mirrors them. Nothing
-  /// does now that the scene has no node graph; kept so callers need not
-  /// change. It must never move the hierarchy: designer tools carry
-  /// children themselves and would move them twice.
-  void syncEntityNode(Entity entity) {}
 
   /// Set [entity]'s position directly (used by inspector text fields).
   void setPosition(Entity entity, Offset position) {
@@ -508,15 +557,16 @@ class EditorSceneState {
     _edited();
   }
 
-  /// Set [entity]'s scale on all three axes, each kept within 0.01..50.
+  /// Set [entity]'s scale on all three axes, each kept within 0.01..50 in
+  /// size; a negative one (a mirror) stays negative.
   void setScale3(Entity entity, Vector3 scale) {
     final transform = entity.getComponent<TransformComponent>();
     if (transform == null) return;
     _settle(entity);
     transform.scale.setValues(
-      scale.x.clamp(0.01, 50.0),
-      scale.y.clamp(0.01, 50.0),
-      scale.z.clamp(0.01, 50.0),
+      _clampScale(scale.x),
+      _clampScale(scale.y),
+      _clampScale(scale.z),
     );
     _settle(entity);
     _edited();
@@ -532,8 +582,19 @@ class EditorSceneState {
   double _snapScale(double value) {
     final step = scaleStep;
     if (step <= 0) return value;
-    // Never snapped to nothing: the smallest scale is one step.
-    return ((value / step).roundToDouble() * step).clamp(step, 50.0);
+    // Never snapped to nothing: the smallest size is one step. The sign is
+    // kept — a scale of -1 is a mirror, not a mistake.
+    final size = ((value.abs() / step).roundToDouble() * step).clamp(
+      step,
+      50.0,
+    );
+    return value < 0 ? -size : size;
+  }
+
+  /// [value] kept between 0.01 and 50 in size, its sign — a mirror — kept.
+  static double _clampScale(double value) {
+    final size = value.abs().clamp(0.01, 50.0);
+    return value < 0 ? -size : size;
   }
 
   /// Rename [entity].
@@ -560,15 +621,22 @@ class EditorSceneState {
 
   /// Forgets an entity about to be destroyed: out of the top level and the
   /// selection, and the scene becomes dirty.
-  ///
-  /// Called by [JustGameEditorPlugin.deleteEntity] before destroying the ECS
-  /// entity.
-  void removeEntityNode(EntityId id) {
+  void removeEntityNode(EntityId id) => removeEntityNodes([id]);
+
+  /// [removeEntityNode] for many at once, in one pass — a delete of
+  /// thousands of tile pieces should not rebuild the selection per piece.
+  void removeEntityNodes(Iterable<EntityId> ids) {
+    final gone = ids is Set<EntityId> ? ids : ids.toSet();
+    if (gone.isEmpty) return;
     batch(() {
-      _rootOrder.remove(id);
-      _multiSelectedEntities.remove(id);
-      _setMultiSelection(multiSelectedIds.value.where((e) => e != id));
-      if (selectedEntity.value?.id == id) {
+      _rootOrder.removeWhere(gone.contains);
+      _multiSelectedEntities.removeWhere((id, _) => gone.contains(id));
+      if (multiSelectedIds.value.any(gone.contains)) {
+        _setMultiSelection(
+          multiSelectedIds.value.where((e) => !gone.contains(e)),
+        );
+      }
+      if (gone.contains(selectedEntity.value?.id)) {
         selectedEntity.value = null;
       }
       _edited();
@@ -582,6 +650,7 @@ class EditorSceneState {
     clipboard.value = List.unmodifiable(List.of(components));
   }
 
+  /// Disposes the signals; the scope calls it when it is torn down.
   void dispose() {
     for (final s in [
       activeScene,

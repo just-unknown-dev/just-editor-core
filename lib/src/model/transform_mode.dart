@@ -4,16 +4,25 @@ import 'package:just_game_engine/just_game_engine.dart';
 /// Which gizmo the selection shows: the floating toolbar's buttons, Q, W,
 /// E and R. One for the editor and the Level Designer alike.
 enum TransformMode {
-  /// Move, scale and turn with one gizmo — how the editor and the designer
-  /// always worked, and where they start.
+  /// Move, scale and turn with one gizmo: the mode the editor and the
+  /// designer start in.
   all('All', Icons.near_me, 'editor.transform.all'),
+
+  /// Arrows that move the selection (W).
   move('Move', Icons.open_with, 'editor.transform.move'),
+
+  /// Handles that scale the selection (E).
   scale('Scale', Icons.aspect_ratio, 'editor.transform.scale'),
+
+  /// A ring that turns the selection (R).
   rotate('Rotate', Icons.rotate_right, 'editor.transform.rotate');
 
   const TransformMode(this.label, this.icon, this.commandId);
 
+  /// Its name in the toolbar button's tooltip.
   final String label;
+
+  /// Its toolbar button's icon.
   final IconData icon;
 
   /// The command that picks it, and so the key bound to that.
@@ -22,6 +31,7 @@ enum TransformMode {
 
 /// Which modes what is selected can take.
 abstract final class TransformModes {
+  /// No gizmo at all: nothing selected is in the world.
   static const Set<TransformMode> none = {};
 
   /// Tiles picked with Select tiles: moved, or turned a quarter at a time.

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../look/editor_constants.dart';
 import '../look/kit/fields.dart';
+import 'field_rows.dart' show parseTypedNumber;
 import 'field_style.dart';
 
 /// Edits a list or a map field as rows, not as JSON.
@@ -11,8 +12,9 @@ import 'field_style.dart';
 /// A list of plain values is a column of cells; a list of objects is a stack
 /// of small cards, one row per key; a map is key / value pairs. Every value
 /// keeps the type it had — a number stays a number — and "Add" makes a copy of
-/// [template], or of the last item when there is none, so a new entry starts
-/// with the right shape instead of an empty brace to fill in by hand.
+/// [template], or, when there is none, a blank of the last item's shape (the
+/// same keys, numbers at zero, text empty), so a new entry starts with the
+/// right shape instead of an empty brace to fill in by hand.
 ///
 /// The label sits above the items rather than beside them: a collection needs
 /// the panel's whole width.
@@ -28,6 +30,7 @@ class CollectionEditor extends StatelessWidget {
     this.itemCell,
   });
 
+  /// The field's name, over the items with their count beside it.
   final String label;
 
   /// The whole row for one key of an object item, when that key needs more
@@ -42,12 +45,22 @@ class CollectionEditor extends StatelessWidget {
 
   /// A `List` or a `Map`; anything else is shown as text.
   final Object? value;
+
+  /// Called with a whole new list or map after every change: a cell kept,
+  /// a key renamed, an item added or removed.
   final ValueChanged<Object?> onChanged;
+
+  /// Shows the items with nothing to type in or switch, and no Add or
+  /// Remove buttons. Off by default.
   final bool readOnly;
 
   /// What a new item looks like: a value for a list, a value for a map's new
-  /// key. Null falls back to a copy of the last item, then to empty text.
+  /// key. Null falls back to a blank of the last item's shape, then to
+  /// empty text.
   final Object? template;
+
+  /// What the field does, from its hint. Not drawn here: the inspector
+  /// already shows a field's description as its row's tooltip.
   final String? description;
 
   static Object? _copy(Object? v) => switch (v) {
@@ -312,9 +325,12 @@ class _Cell extends StatelessWidget {
       }
     }
     final trimmed = text.trim();
+    // Never a number no file can hold (NaN, Infinity): the cell keeps what
+    // it had.
+    final typed = parseTypedNumber(trimmed);
     return switch (v) {
-      int() => int.tryParse(trimmed) ?? double.tryParse(trimmed)?.round() ?? v,
-      double() => double.tryParse(trimmed) ?? v,
+      int() => int.tryParse(trimmed) ?? typed?.round() ?? v,
+      double() => typed ?? v,
       _ => trimmed,
     };
   }
@@ -480,10 +496,15 @@ class EntityLinkList extends StatelessWidget {
     required this.onSelect,
   });
 
+  /// The field's name, over the list with its count beside it.
   final String label;
 
-  /// One entry per reference; null where the entity no longer exists.
+  /// One entry per reference, in order: the entity's id and its name, or a
+  /// null name where the entity no longer exists (shown as missing, and not
+  /// clickable).
   final List<({int id, String? name})> names;
+
+  /// Called with the id of the entity clicked — to select it, say.
   final ValueChanged<int> onSelect;
 
   @override

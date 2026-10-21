@@ -187,17 +187,26 @@ class OverlayPointerContext {
   /// The part of the canvas not covered by panels.
   final Rect area;
 
+  /// The viewport camera, for turning [screen] into a world point and back.
   final EditorView camera;
+
+  /// The world being edited.
   final jge.World world;
+
+  /// Designer state: selection, active tool, guides, snapping.
   final LevelDesignerController controller;
 
   /// Where an overlay records an undoable edit (a moved guide, say).
   final EditorHistory history;
 
+  /// The modifier keys held with the event.
   final ModifierKeys modifiers;
+
+  /// The authoring grid's cell size, in world units.
   final double gridSize;
 
-  /// Whether snapping applies right now, folding in the Ctrl override.
+  /// Whether snapping applies right now, folding in the Ctrl (Cmd on macOS)
+  /// override.
   bool get snapping => controller.snapEnabled.value && !modifiers.control;
 }
 
@@ -208,8 +217,11 @@ mixin InteractiveOverlay on DesignerOverlay {
   /// Return true to claim the gesture.
   bool onPointerDown(OverlayPointerContext context) => false;
 
+  /// The pointer moved during a gesture this overlay claimed.
   void onPointerMove(OverlayPointerContext context) {}
 
+  /// The pointer was released, ending a gesture this overlay claimed:
+  /// commit any edit here, through [OverlayPointerContext.history].
   void onPointerUp(OverlayPointerContext context) {}
 
   /// The gesture was abandoned; discard any in-progress state.

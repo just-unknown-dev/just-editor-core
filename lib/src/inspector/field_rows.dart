@@ -4,14 +4,15 @@
 /// and look like the rest of the inspector.
 library;
 
+import '../../io.dart';
 import 'field_style.dart';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:just_colours/just_colours.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
+import '../extension/asset_index.dart' show AssetIndex;
 import '../services/package_asset_paths.dart';
 import '../look/editor_constants.dart';
 import '../look/editor_metrics.dart';
@@ -115,6 +116,9 @@ ColourSelection shapePaintStyleToSelection(jge.ShapePaintStyle style) {
 
 // ── Row widgets ───────────────────────────────────────────────────────────────
 
+/// A colour field: a swatch and its hex code (or "Gradient") in a box that
+/// opens the editor's colour picker when tapped. With [supportsGradient] the
+/// picker offers gradients, and a tint over them, as well as a solid colour.
 class ColorEditorRow extends StatelessWidget {
   const ColorEditorRow({
     super.key,
@@ -129,9 +133,19 @@ class ColorEditorRow extends StatelessWidget {
     this.onPreviewEnd,
   });
 
+  /// The field's name: in the label column, and as the picker's title.
   final String label;
+
+  /// The colour or gradient shown. Its blend mode is kept on what the
+  /// picker returns.
   final jge.ShapePaintStyle paintStyle;
+
+  /// Called with the new paint when the picker closes on a different one;
+  /// not called when it closes on what it opened with.
   final ValueChanged<jge.ShapePaintStyle> onChanged;
+
+  /// Whether the picker offers gradients, and a tint over them, besides a
+  /// solid colour. Off by default.
   final bool supportsGradient;
 
   /// Whether this colour is not the field's own but the one it falls back
@@ -292,10 +306,15 @@ class ColorEditorRow extends StatelessWidget {
   }
 }
 
+/// A label and a value that cannot be edited: the same box as the other
+/// rows, unfilled, with the value in quieter text.
 class ReadonlyRow extends StatelessWidget {
   const ReadonlyRow({super.key, required this.label, required this.value});
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The text shown in the box.
   final String value;
 
   @override
@@ -336,6 +355,7 @@ class ReadonlyRow extends StatelessWidget {
   }
 }
 
+/// An on/off field: a checkbox and "On" or "Off" in a box; a tap flips it.
 class BoolEditorRow extends StatelessWidget {
   const BoolEditorRow({
     super.key,
@@ -344,8 +364,13 @@ class BoolEditorRow extends StatelessWidget {
     required this.onChanged,
   });
 
+  /// The field's name, in the label column and for a screen reader.
   final String label;
+
+  /// Whether the field is on.
   final bool value;
+
+  /// Called with the flipped value on a tap.
   final ValueChanged<bool> onChanged;
 
   @override
@@ -398,6 +423,9 @@ class BoolEditorRow extends StatelessWidget {
   }
 }
 
+/// One number with its label as a drag handle (a [ScrubbableNumberField]):
+/// drag the label sideways to change it, or type a value and keep it with
+/// Enter, Tab or a click elsewhere.
 class ScrubFieldRow extends StatefulWidget {
   const ScrubFieldRow({
     super.key,
@@ -407,9 +435,19 @@ class ScrubFieldRow extends StatefulWidget {
     required this.onChanged,
   });
 
+  /// The field's name, in the label column; dragging it scrubs the value.
   final String label;
+
+  /// The number shown. A new one replaces the text unless the field is
+  /// being typed in.
   final double value;
+
+  /// Step, drag speed, digits and limits; a typed value is kept within the
+  /// limits.
   final NumberScrubConfig scrubConfig;
+
+  /// Called with each value kept: every step of a drag, and a typed value
+  /// once it is kept.
   final ValueChanged<double> onChanged;
 
   @override
@@ -448,7 +486,7 @@ class _ScrubFieldRowState extends State<ScrubFieldRow> {
   }
 
   void _commit() {
-    final v = double.tryParse(_ctrl.text.trim());
+    final v = parseTypedNumber(_ctrl.text, config: widget.scrubConfig);
     if (v != null) widget.onChanged(v);
   }
 
@@ -480,12 +518,25 @@ class SliderFieldRow extends StatelessWidget {
     this.unit = '',
   });
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The value shown; clamped to [min]..[max] for the slider.
   final double value;
+
+  /// The slider's left end, the lowest value it gives.
   final double min;
+
+  /// The slider's right end, the highest value it gives.
   final double max;
+
+  /// What the value moves in, 0.05 by default; 0 or less moves it freely.
   final double step;
+
+  /// Decimal places in the number beside the slider, 2 by default.
   final int decimals;
+
+  /// Written after the number (`%`, `px`); none when empty.
   final String unit;
 
   /// Every value the drag passes through, and the one it ends on. (An
@@ -543,16 +594,27 @@ class AxesFieldRow extends StatefulWidget {
   }) : assert(axes.length == values.length),
        assert(scrubConfigs == null || scrubConfigs.length == values.length);
 
+  /// The field's name: left of the cells, or on a line above them in a
+  /// narrow panel.
   final String label;
 
   /// The axis letters, one per value: `['X', 'Y']`.
   final List<String> axes;
+
+  /// The numbers, one per axis in the order of [axes]. A new value
+  /// replaces a cell's text unless that cell is being typed in.
   final List<double> values;
+
+  /// Step, drag speed, digits and limits of every cell, unless
+  /// [scrubConfigs] gives each its own.
   final NumberScrubConfig scrubConfig;
 
   /// One per cell, where they differ — a row of separate fields, each with
   /// its own limits. Null gives every cell [scrubConfig].
   final List<NumberScrubConfig>? scrubConfigs;
+
+  /// Draws each value as plain text beside its letter, with nothing to
+  /// drag or type. Off by default.
   final bool readOnly;
 
   /// Every value, with the edited one replaced.
@@ -630,7 +692,7 @@ class _AxesFieldRowState extends State<AxesFieldRow> {
   }
 
   void _commit(int i) {
-    final v = double.tryParse(_ctrls[i].text.trim());
+    final v = parseTypedNumber(_ctrls[i].text, config: _config(i));
     if (v == null) return;
     widget.onChanged(List<double>.of(widget.values)..[i] = v);
   }
@@ -722,6 +784,8 @@ class _AxesFieldRowState extends State<AxesFieldRow> {
   }
 }
 
+/// A text field: a [CommitTextField] that wraps a long value onto up to four
+/// lines and keeps what was typed on Enter or when the field is left.
 class TextEditorRow extends StatelessWidget {
   const TextEditorRow({
     super.key,
@@ -730,8 +794,15 @@ class TextEditorRow extends StatelessWidget {
     required this.onSubmitted,
   });
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The text shown. A new one replaces it unless the field is being typed
+  /// in.
   final String initialValue;
+
+  /// Called with the text kept, once per change; not called when it is
+  /// what it was.
   final ValueChanged<String> onSubmitted;
 
   @override
@@ -761,6 +832,8 @@ class TextEditorRow extends StatelessWidget {
   }
 }
 
+/// One text value out of a list, as an [EditorDropdown] whose entries read
+/// as the values themselves.
 class DropdownEditorRow extends StatelessWidget {
   const DropdownEditorRow({
     super.key,
@@ -772,9 +845,18 @@ class DropdownEditorRow extends StatelessWidget {
     this.allowCustom = false,
   });
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The chosen value; it is ticked in the list. A value that is not among
+  /// [options] shows an empty field.
   final String value;
+
+  /// The values to choose from, each its own label.
   final List<String> options;
+
+  /// Called with the value picked from the list, or typed with
+  /// [allowCustom].
   final ValueChanged<String> onChanged;
 
   /// A filter box at the top of the list, for a long one.
@@ -811,17 +893,32 @@ class DropdownEditorRow extends StatelessWidget {
 
 // ── Vertex list row (Polygon / RoundedPolygon / Chain) ────────────────────────
 
+/// A list of points — a polygon's or a chain's vertices — as an x and a y
+/// box per point, a remove button on each, and "Add point" under them.
 class OffsetListEditorRow extends StatefulWidget {
   const OffsetListEditorRow({
     super.key,
     required this.label,
     required this.points,
     required this.onChanged,
+    this.minPoints = 0,
   });
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The points shown, in order. A list with different points replaces
+  /// what the row shows.
   final List<Offset> points;
+
+  /// Called with the whole list after every change: a coordinate kept, a
+  /// point removed or added. A new point goes to the right of the last, by
+  /// a quarter of the outline's size (20 with fewer than two points).
   final ValueChanged<List<Offset>> onChanged;
+
+  /// The fewest points the list may be left with — 3 for a polygon, 2 for
+  /// a chain: at that many the remove buttons are off.
+  final int minPoints;
 
   @override
   State<OffsetListEditorRow> createState() => _OffsetListEditorRowState();
@@ -865,6 +962,7 @@ class _OffsetListEditorRowState extends State<OffsetListEditorRow> {
   }
 
   void _remove(int index) {
+    if (_points.length <= widget.minPoints) return;
     setState(() => _points.removeAt(index));
     _commit();
   }
@@ -876,7 +974,10 @@ class _OffsetListEditorRowState extends State<OffsetListEditorRow> {
     var step = 20.0;
     if (_points.length >= 2) {
       final xs = _points.map((p) => p.dx), ys = _points.map((p) => p.dy);
-      final size = math.max(xs.reduce(math.max) - xs.reduce(math.min), ys.reduce(math.max) - ys.reduce(math.min));
+      final size = math.max(
+        xs.reduce(math.max) - xs.reduce(math.min),
+        ys.reduce(math.max) - ys.reduce(math.min),
+      );
       if (size > 0) step = size / 4;
     }
     setState(() => _points.add(last + Offset(step, 0)));
@@ -920,8 +1021,12 @@ class _OffsetListEditorRowState extends State<OffsetListEditorRow> {
                       const SizedBox(width: 4),
                       EditorIconButton(
                         icon: Icons.close,
-                        tooltip: 'Remove this point',
-                        onTap: () => _remove(i),
+                        tooltip: _points.length > widget.minPoints
+                            ? 'Remove this point'
+                            : 'At least ${widget.minPoints} points',
+                        onTap: _points.length > widget.minPoints
+                            ? () => _remove(i)
+                            : null,
                       ),
                     ],
                   ),
@@ -958,12 +1063,31 @@ class _OffsetListEditorRowState extends State<OffsetListEditorRow> {
   }
 }
 
-/// The controls below are the bare ones: a box and nothing else.
+/// A number typed into a field, or null for anything else — and for what
+/// is not a finite number (`NaN`, `Infinity`, `1e999`), which no scene file
+/// can hold, so a component holding one could not be saved. With [config],
+/// kept within its `min` and `max`, and whole when it is an integer.
+double? parseTypedNumber(String text, {NumberScrubConfig? config}) {
+  final v = double.tryParse(text.trim());
+  if (v == null || !v.isFinite) return null;
+  var out = v;
+  if (config != null) {
+    if (config.min case final min?) out = math.max(out, min);
+    if (config.max case final max?) out = math.min(out, max);
+    if (config.integer) out = out.roundToDouble();
+  }
+  return out;
+}
+
+/// A bare number box: the inspector's field box with no label column.
+/// Kept on Enter, Tab or a click elsewhere; text that is not a finite
+/// number puts back the value it had.
 ///
-/// Every `…EditorRow` in this file is a *row* — a label column and then its
-/// control — so one must never be put inside another row, or the label
+/// Every `…EditorRow` in this library is a *row* — a label column and then
+/// its control — so one must never be put inside another row, or the label
 /// column overflows whatever it was given. Anything building a row of its
-/// own reaches for these instead.
+/// own reaches for the bare fields instead: this one, [MiniTextField] and
+/// [MiniColorField].
 class MiniNumberField extends StatelessWidget {
   const MiniNumberField({
     super.key,
@@ -973,7 +1097,10 @@ class MiniNumberField extends StatelessWidget {
     this.inherited = false,
   });
 
+  /// The number shown, written with [fractionDigits] decimals.
   final double value;
+
+  /// Called with the number kept, once per change.
   final ValueChanged<double> onSubmitted;
 
   /// How the number is written; 0 for a whole one.
@@ -992,8 +1119,8 @@ class MiniNumberField extends StatelessWidget {
     return CommitTextField(
       key: ValueKey('$value:$inherited'),
       value: value.toStringAsFixed(fractionDigits),
-      accept: (text) => double.tryParse(text.trim()) != null,
-      onCommit: (text) => onSubmitted(double.parse(text.trim())),
+      accept: (text) => parseTypedNumber(text) != null,
+      onCommit: (text) => onSubmitted(parseTypedNumber(text)!),
       keyboardType: const TextInputType.numberWithOptions(
         signed: true,
         decimal: true,
@@ -1036,12 +1163,18 @@ class MiniTextField extends StatelessWidget {
     this.hint = '',
   });
 
+  /// The text shown.
   final String value;
+
+  /// Called with the text kept, once per change.
   final ValueChanged<String> onSubmitted;
 
   /// Whether typed text can be kept; refused, the field shows [value]
   /// again. See [CommitTextField.accept].
   final bool Function(String text)? accept;
+
+  /// Muted text shown while the box is empty; `''` (the default) shows
+  /// none.
   final String hint;
 
   @override
@@ -1075,7 +1208,11 @@ class MiniColorField extends StatelessWidget {
     this.onPreviewEnd,
   });
 
+  /// The colour in the swatch, and the picker's starting colour.
   final Color color;
+
+  /// Called with the colour picked when the picker closes on a different
+  /// one.
   final ValueChanged<Color> onChanged;
 
   /// What the colour is for, shown at the top of the picker.
@@ -1153,6 +1290,10 @@ class MiniColorField extends StatelessWidget {
 
 // ── Asset path picker row ─────────────────────────────────────────────────────
 
+/// A project file picked by path: a box showing the path that opens a
+/// searchable list of the files with one of [extensions] under `assets/`
+/// (and the installed packages' as `packages/<name>/…`). A file dragged
+/// from the editor's asset browser can be dropped on the box.
 class AssetRefEditorRow extends StatefulWidget {
   const AssetRefEditorRow({
     super.key,
@@ -1161,14 +1302,32 @@ class AssetRefEditorRow extends StatefulWidget {
     required this.onChanged,
     this.extensions = const ['png'],
     this.onGenerate,
+    this.assets,
   });
 
+  /// The field's name, in the label column.
   final String label;
+
+  /// The chosen file's path, relative to the project (`assets/…`); empty
+  /// for none, which reads `Select PNG…` (the [extensions], in capitals).
   final String value;
+
+  /// Called with the path picked from the list, dropped on the box, or
+  /// returned by [onGenerate].
   final ValueChanged<String> onChanged;
+
+  /// The file endings listed and accepted on a drop, without the dot and
+  /// in any case: `['png']` by default. `json` matches `material.json`.
   final List<String> extensions;
 
-  /// When non-null, shows a wand button. Returns the generated file path or null.
+  /// The project's files as the editor already knows them (the scope's
+  /// `assets`): listed from memory, and kept current as files come and go.
+  /// Without it the assets folder is read when the list is opened.
+  final AssetIndex? assets;
+
+  /// When set, a "Generate template JSON" button beside the box runs it. It
+  /// returns the new file's path, which becomes the value, or null to keep
+  /// the value as it is.
   final Future<String?> Function()? onGenerate;
 
   @override
@@ -1192,14 +1351,32 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
       duration: EditorMetrics.motionFast,
     );
     _sizeAnim = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
-    _scanFiles();
+    widget.assets?.revision.addListener(_indexChanged);
+    // Nothing read until the list is opened: an inspector shows many of
+    // these, and each one walking the assets folder as it was built made
+    // every selection read the disk.
+  }
+
+  @override
+  void didUpdateWidget(AssetRefEditorRow old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.assets, widget.assets)) {
+      old.assets?.revision.removeListener(_indexChanged);
+      widget.assets?.revision.addListener(_indexChanged);
+      if (_isExpanded) _scanFiles();
+    }
   }
 
   @override
   void dispose() {
+    widget.assets?.revision.removeListener(_indexChanged);
     _anim.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _indexChanged() {
+    if (_isExpanded) _scanFiles();
   }
 
   /// Whether [path] ends in `.` and one of [endings] (lower case).
@@ -1209,35 +1386,55 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
   }
 
   Future<void> _scanFiles() async {
+    final exts = widget.extensions.map((e) => e.toLowerCase()).toSet();
+    final index = widget.assets;
+    final List<String> paths;
+    try {
+      paths = index != null
+          ? [
+              // By ending, so `material.json` (two dots) matches as `json`.
+              for (final e in index.entries)
+                if (!e.isDirectory && _hasEnding(e.path, exts)) e.path,
+            ]
+          : await _readFiles(exts);
+    } on FileSystemException catch (e) {
+      // A folder that cannot be read: the list shows what it had.
+      debugPrint('Listing assets: ${e.message} ${e.path ?? ''}');
+      return;
+    }
+    paths.sort();
+    if (!mounted) return;
+    setState(() => _filePaths = paths);
+  }
+
+  /// The files under the project's assets folder, and the installed
+  /// packages' assets as `packages/<name>/…`, with one of [exts].
+  static Future<List<String>> _readFiles(Set<String> exts) async {
     final base = Directory.current.path.replaceAll(r'\', '/');
     final assetsDir = Directory('$base/assets');
-    final exts = widget.extensions.map((e) => e.toLowerCase()).toSet();
     final paths = <String>[];
     if (await assetsDir.exists()) {
-      await for (final entity in assetsDir.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is File) {
-          // By ending, so `material.json` (two dots) matches as `json` does.
-          if (_hasEnding(entity.path, exts)) {
-            final relative = entity.path
-                .replaceAll(r'\', '/')
-                .replaceFirst('$base/', '');
-            paths.add(relative);
-          }
+      final listing = assetsDir
+          .list(recursive: true, followLinks: false)
+          .handleError(
+            (Object _) {},
+            test: (error) => error is FileSystemException,
+          );
+      await for (final entity in listing) {
+        // By ending, so `material.json` (two dots) matches as `json` does.
+        if (entity is File && _hasEnding(entity.path, exts)) {
+          paths.add(
+            entity.path.replaceAll(r'\', '/').replaceFirst('$base/', ''),
+          );
         }
       }
     }
-    // Installed packages' assets too, as `packages/<name>/…`.
     paths.addAll(
       PackageAssetPaths.of(
         base,
       ).packageFiles(endings: [for (final e in exts) '.$e']),
     );
-    paths.sort();
-    if (!mounted) return;
-    setState(() => _filePaths = paths);
+    return paths;
   }
 
   void _toggleExpanded() {
@@ -1245,6 +1442,8 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
       _isExpanded = !_isExpanded;
       if (_isExpanded) {
         _anim.forward();
+        // Read now — what is there now, a file added since included.
+        _scanFiles();
       } else {
         _anim.reverse();
       }
@@ -1416,7 +1615,10 @@ class _AssetRefEditorRowState extends State<AssetRefEditorRow>
                       ),
                       decoration: InputDecoration(
                         isDense: true,
-                        hintText: 'Search PNG files…',
+                        hintText:
+                            'Search '
+                            '${widget.extensions.map((e) => e.toUpperCase()).join('/')}'
+                            ' files…',
                         hintStyle: TextStyle(
                           color: EditorTheme.textMuted,
                           fontSize: 11,

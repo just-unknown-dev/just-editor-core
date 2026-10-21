@@ -35,6 +35,46 @@ void main() {
     expect([for (final s in c.visible) s.entry.message], ['m1', 'm2', 'm3']);
   });
 
+  test('a new error shows over three running tasks', () async {
+    final tasks = [
+      for (var i = 0; i < 3; i++) StreamController<EditorSnackBarStep>(),
+    ];
+    final running = [
+      for (final (i, t) in tasks.indexed)
+        c.showSnackBar(
+          EditorSnackBarEntry(message: 'Download $i', progressStream: t.stream),
+        ),
+    ];
+    final error = c.showSnackBar(
+      const EditorSnackBarEntry(
+        message: 'Could not save',
+        type: EditorSnackBarType.error,
+      ),
+    );
+    expect(c.visible, contains(error));
+    expect(c.visible, hasLength(3));
+    expect(c.minimized, [running.first], reason: 'its task still followed');
+    for (final t in tasks) {
+      await t.close();
+    }
+  });
+
+  test('a task keeps its latest steps, and counts the ones before', () async {
+    final task = StreamController<EditorSnackBarStep>();
+    final import = c.showSnackBar(
+      EditorSnackBarEntry(message: 'Importing', progressStream: task.stream),
+    );
+    final total = EditorSnack.maxSteps + 25;
+    for (var i = 0; i < total; i++) {
+      task.add(EditorSnackBarStep(message: 'file $i'));
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(import.steps, hasLength(EditorSnack.maxSteps));
+    expect(import.earlierSteps, 25);
+    expect(import.steps.last.message, 'file ${total - 1}');
+    await task.close();
+  });
+
   testWidgets('a message goes by itself; a failed task stays', (tester) async {
     final task = StreamController<EditorSnackBarStep>();
     c.showSnackBar(

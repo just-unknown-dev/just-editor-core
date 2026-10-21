@@ -5,9 +5,9 @@ import '../../view/editor_view.dart';
 
 /// The shape of the cells the designer paints, snaps and fills on.
 ///
-/// Everything that used to assume squares — cell lookup, brushes, bucket
-/// fill, merging painted cells into entities, the grid lines themselves —
-/// asks this instead. Square is the default; a module supplies another
+/// Everything that depends on the cells' shape — cell lookup, brushes,
+/// bucket fill, merging painted cells into entities, the grid lines
+/// themselves — asks this. Square is the default; a module supplies another
 /// (`HexGrid` ships as one). Cells are addressed by [Point2]: column and row
 /// for squares, axial `q`/`r` for hexes.
 abstract class GridTopology {

@@ -12,11 +12,19 @@ class InspectorAction {
     this.icon,
   });
 
+  /// A stable id for the action, namespaced like `physics.fitToVisual`, for
+  /// code and tests to find it by; not shown.
   final String id;
+
+  /// What the action does, as the button's tooltip.
   final String label;
+
+  /// The button's icon; a bolt when null.
   final IconData? icon;
 
-  /// Runs the action for [component]; the inspector refreshes afterwards.
+  /// Runs the action for the card's `component`; once the future completes
+  /// the inspector treats the component as edited (the scene is marked
+  /// unsaved) and refreshes.
   final Future<void> Function(BuildContext context, jge.Component component)
   run;
 }

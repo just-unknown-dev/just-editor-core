@@ -1,0 +1,3 @@
+# Plain tests that boot an engine or touch the disk get twice the default
+# 30 s: a full run on a busy machine can stall one past it.
+timeout: 2x

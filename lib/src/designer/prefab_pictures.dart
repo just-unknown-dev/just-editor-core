@@ -13,7 +13,7 @@ typedef PrefabPicture = Widget? Function(PrefabDefinition prefab, double size);
 /// palette. Per user, kept in the editor's preferences, by prefab id.
 abstract final class PrefabFavourites {
   /// Where they are kept.
-  static final SettingPref<Set<String>> pref = SettingPref(
+  static SettingPref<Set<String>> get pref => SettingPref(
     'editor.designer.favouritePrefabs',
     defaultValue: const {},
     encode: (ids) => ids.join('\n'),

@@ -102,4 +102,106 @@ void main() {
     expect(shown(tester), ends.single);
     expect(find.text(ends.single.toStringAsFixed(2)), findsOneWidget);
   });
+
+  // The slider in something that keeps its value; [set] changes it from
+  // outside, as an undo does.
+  Future<(List<double>, void Function(double))> pumpKept(
+    WidgetTester tester,
+  ) async {
+    final ends = <double>[];
+    var value = 0.2;
+    late StateSetter setOuter;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 400,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  setOuter = setState;
+                  return Column(
+                    children: [
+                      EditorSlider(
+                        value: value,
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        decimals: 2,
+                        onChanged: (_) {},
+                        onChangeEnd: (v) {
+                          ends.add(v);
+                          setState(() => value = v);
+                        },
+                      ),
+                      const TextField(),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return (ends, (double v) => setOuter(() => value = v));
+  }
+
+  testWidgets('a value typed and kept with Enter is one change', (
+    tester,
+  ) async {
+    final (ends, _) = await pumpKept(tester);
+    final box = find.byType(TextField).first;
+    await tester.tap(box);
+    await tester.pump();
+    await tester.enterText(box, '0.5');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.tap(find.byType(TextField).last);
+    await tester.pump();
+    expect(ends, [0.5]);
+  });
+
+  testWidgets('a step of 0 moves freely rather than throwing', (tester) async {
+    final ends = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 400,
+              child: EditorSlider(
+                value: 0.2,
+                min: 0,
+                max: 1,
+                step: 0,
+                decimals: 2,
+                onChanged: (_) {},
+                onChangeEnd: ends.add,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), '0.333');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(ends, [0.333]);
+  });
+
+  testWidgets('leaving the box untouched keeps a change made from outside', (
+    tester,
+  ) async {
+    final (ends, set) = await pumpKept(tester);
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    set(0.7);
+    await tester.pump();
+    await tester.tap(find.byType(TextField).last);
+    await tester.pump();
+    expect(ends, isEmpty, reason: 'nothing was typed');
+    expect(find.text('0.70'), findsOneWidget);
+  });
 }

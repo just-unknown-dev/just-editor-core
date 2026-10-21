@@ -21,7 +21,10 @@ class TagUse {
     required this.where,
   });
 
+  /// The tag's name, without the `#`.
   final String tag;
+
+  /// Whether the tag is carried there or pointed at.
   final TagUseKind kind;
 
   /// The entity's name, or the timeline's file.
@@ -34,14 +37,20 @@ class TagUse {
   String toString() => '$owner: $where (#$tag)';
 }
 
-/// Finds, renames and removes tags in saved scene and timeline JSON.
+/// Finds, renames and removes tags in saved scene, prefab and timeline JSON.
 ///
 /// It knows nothing about particular components: a field is a tag if its
 /// definition says so — a `tagList`, a `tagRef`, an `entityTarget` naming a
 /// tag, or an item key of a list with those [jge.FieldHint.itemKinds] — and
-/// a timeline track binding (`{"binding": {"tag": …}}`) is one wherever it
-/// sits, inline timelines included. So a package's own components are
-/// covered the moment their fields use those types.
+/// a timeline track binding (`{"binding": {"tag": …}}`, or the short
+/// `"#tag"`) is one wherever it sits, inline timelines included. So a
+/// package's own components are covered the moment their fields use those
+/// types.
+///
+/// A prefab file (`*.prefab.json`) lists its entities as a scene does, so
+/// the scene calls ([inScene], [renameInScene], [removeFromScene]) take
+/// one too; in either, an instance of a prefab is walked for what it
+/// changes — the fields it overrides and the components it adds.
 ///
 /// Rewrites happen in place, on JSON the caller owns.
 class TagReferences {
@@ -134,6 +143,10 @@ class TagReferences {
 
   /// Calls [visit] for each use; a non-null answer replaces the tag there
   /// (empty removes it, where that is possible). Returns the replacements.
+  ///
+  /// Walks a scene's entities, and a prefab file's (`*.prefab.json`), which
+  /// are listed the same way: each one's components, and — for an instance
+  /// of a prefab — what the instance changes in it.
   int _visitScene(
     Map<String, dynamic> scene,
     String? Function(TagUse use, Object? json) visit,
@@ -144,9 +157,51 @@ class TagReferences {
     for (final entity in entities.whereType<Map>()) {
       final owner = '${entity['name'] ?? '(unnamed)'}';
       final components = entity['components'];
-      if (components is! List) continue;
-      for (final component in components.whereType<Map>()) {
-        changed += _visitComponent(component, owner, visit);
+      if (components is List) {
+        for (final component in components.whereType<Map>()) {
+          changed += _visitComponent(component, owner, visit);
+        }
+      }
+      final block = entity['prefab'];
+      if (block is Map) changed += _visitInstance(block, owner, visit);
+    }
+    return changed;
+  }
+
+  /// An instance's `prefab` block: the fields it changes (its `overrides`,
+  /// each one field of one component) and the components it adds. What the
+  /// prefab itself carries is in the prefab's file, walked on its own.
+  int _visitInstance(
+    Map block,
+    String owner,
+    String? Function(TagUse use, Object? json) visit,
+  ) {
+    var changed = 0;
+    final overrides = block['overrides'];
+    if (overrides is List) {
+      for (final change in overrides.whereType<Map>()) {
+        final type = change['component'];
+        final field = change['field'];
+        if (type is! String || field is! String) continue;
+        // The one field, as the component it belongs to would hold it.
+        final fields = <String, dynamic>{field: change['value']};
+        final n = _visitComponent(
+          {'type': type, 'fields': fields},
+          owner,
+          visit,
+        );
+        if (n == 0) continue;
+        change['value'] = fields[field];
+        changed += n;
+      }
+    }
+    final added = block['addedComponents'];
+    if (added is List) {
+      for (final entry in added.whereType<Map>()) {
+        final component = entry['component'];
+        if (component is Map) {
+          changed += _visitComponent(component, owner, visit);
+        }
       }
     }
     return changed;
@@ -253,9 +308,8 @@ class TagReferences {
         fields[key] = replacement;
         return 1;
       case _target:
-        if (value is! Map || value['tag'] is! String) return 0;
-        final tag = value['tag'] as String;
-        if (tag.isEmpty) return 0;
+        final tag = _tagOf(value);
+        if (tag == null) return 0;
         final replacement = visit(
           TagUse(
             tag: tag,
@@ -266,22 +320,49 @@ class TagReferences {
           value,
         );
         if (replacement == null) return 0;
-        fields[key] = replacement.isEmpty ? null : {'tag': replacement};
+        fields[key] = replacement.isEmpty
+            ? null
+            : _retagged(value, replacement);
         return 1;
     }
     return 0;
   }
 
-  /// Every `binding: {tag: …}` under [json], at any depth.
+  /// The tag a saved target or binding names, read as the engine reads it
+  /// (`EntityTarget.fromJson`, `TrackBinding.fromJson`): `{tag: …}` — unless
+  /// it names an entity too, which wins — or the short text `#tag` a
+  /// hand-written file may hold. Null when it names no tag.
+  static String? _tagOf(Object? value) {
+    if (value is Map) {
+      if (value['name'] is String) return null;
+      final tag = value['tag'];
+      return tag is String && tag.isNotEmpty ? tag : null;
+    }
+    if (value is String) {
+      final text = value.trim();
+      if (!text.startsWith('#')) return null;
+      final tag = text.substring(1).trim();
+      return tag.isEmpty ? null : tag;
+    }
+    return null;
+  }
+
+  /// [value] naming [tag] instead, in the form it was written in.
+  static Object _retagged(Object? value, String tag) =>
+      value is String ? '#$tag' : {'tag': tag};
+
+  /// Every `binding: {tag: …}` (or `binding: "#tag"`) under [json], at any
+  /// depth.
   static int _visitBindings(Object? json, String? Function(String tag) visit) {
     var changed = 0;
     if (json is Map) {
       for (final e in json.entries.toList()) {
         final value = e.value;
-        if (e.key == 'binding' && value is Map && value['tag'] is String) {
-          final replacement = visit(value['tag'] as String);
+        final tag = e.key == 'binding' ? _tagOf(value) : null;
+        if (tag != null) {
+          final replacement = visit(tag);
           if (replacement != null && replacement.isNotEmpty) {
-            json[e.key] = {'tag': replacement};
+            json[e.key] = _retagged(value, replacement);
             changed++;
           }
         } else {

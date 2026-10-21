@@ -2,10 +2,13 @@
 ///
 /// Unique against the world *and* against every name already handed out.
 /// Tools name a whole batch — a paint stroke's merged rectangles, a
-/// multi-entity duplicate — before creating any of it, so checking the world
-/// alone gave every entity in the batch the same name. Parents are linked by
-/// name when a level loads, so a duplicate name is not cosmetic.
+/// multi-entity duplicate — before creating any of it, so checked against
+/// the world alone, every entity in the batch would get the same name.
+/// Parents are linked by name when a level loads, so a duplicate name is
+/// not cosmetic.
 class UniqueNamer {
+  /// Avoids the names the given function returns — the world's entity
+  /// names, say — asked again on every call.
   UniqueNamer(this._existingNames);
 
   final Iterable<String> Function() _existingNames;

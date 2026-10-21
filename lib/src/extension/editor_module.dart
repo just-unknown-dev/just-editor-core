@@ -71,7 +71,7 @@ class DesignerToolContext {
   /// The undo stack. Every edit a tool makes should be one command on it.
   final EditorHistory history;
 
-  /// Returns an entity name not already in use, built from [prefix].
+  /// Returns an entity name not already in use, built from `prefix`.
   final String Function(String prefix) uniqueName;
 }
 
@@ -141,7 +141,13 @@ abstract class EditorModule {
 
   /// State this module keeps per designer session — a route being edited,
   /// say. Tools reach it with `context.stateOf<T>()`; it survives a reload.
+  /// Released through [disposeSessionState].
   Object? createSessionState(DesignerToolContext context) => null;
+
+  /// Releases [state], which [createSessionState] made: its session has
+  /// closed, or this module has left it (another designer chosen). For
+  /// state that holds signals, listeners or timers. Nothing by default.
+  void disposeSessionState(Object state) {}
 
   /// What this module saves in the scene file's `editor` section, under its
   /// own id. Null saves nothing.
@@ -258,7 +264,8 @@ abstract class EditorModule {
   /// first non-null answer is the one drawn.
   List<EntityIcon> get entityIcons => const [];
 
-  /// Which entities the scene tree must not delete, beyond the camera.
+  /// Which entities this module says must not be deleted; see
+  /// [EditorScope.isProtected].
   EntityProtectionRule? get protectionRule => null;
 
   /// Palettes offered in the settings dialog beside the built-in accents.
@@ -364,8 +371,8 @@ abstract class EditorModule {
 /// The modules registered with one editor, and how their contributions reach
 /// the editor's registries.
 ///
-/// Owned by an [EditorScope]; there is no process-wide list. [reload]
-/// rebuilds every scope-level registry from scratch — built-ins first, then
+/// Owned by an [EditorScope]; there is no process-wide list. The scope's
+/// `reload` rebuilds every scope-level registry from scratch — built-ins first, then
 /// each module in registration order — so a module can replace a built-in by
 /// reusing its id, and nothing a module *stopped* contributing lingers.
 class ModuleRegistry {
@@ -373,6 +380,37 @@ class ModuleRegistry {
 
   final Map<String, EditorModule> _modules = {};
   final Set<String> _builtIn = {};
+
+  /// The modules whose [EditorModule.onUpdate] threw and was reported —
+  /// said once, not once a frame, until it runs cleanly again.
+  final Set<String> _failingUpdate = {};
+
+  /// Reports what [module] threw while the editor called it [doing], and
+  /// goes on: one module's mistake must not stop the others, or the
+  /// editor's own tick.
+  static void _report(
+    EditorModule module,
+    String doing,
+    Object error,
+    StackTrace stack,
+  ) => FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'just_editor_core',
+      context: ErrorDescription('in module "${module.id}" while $doing'),
+    ),
+  );
+
+  /// Disposes [old] when [next] takes its place and is another instance.
+  static void _replaced(EditorModule? old, EditorModule next) {
+    if (old == null || identical(old, next)) return;
+    try {
+      old.dispose();
+    } catch (error, stack) {
+      _report(old, 'disposing it', error, stack);
+    }
+  }
 
   /// The modules registered with the editor, in registration order — not
   /// the [builtIns], which come ahead of them.
@@ -399,12 +437,18 @@ class ModuleRegistry {
   /// Looks up a module by id.
   EditorModule? byId(String id) => _modules[id];
 
-  /// Registers [module], replacing any existing one with the same id.
-  void register(EditorModule module) => _modules[module.id] = module;
+  /// Registers [module], replacing — and disposing — any other one with
+  /// the same id.
+  void register(EditorModule module) {
+    final old = _modules[module.id];
+    _modules[module.id] = module;
+    _replaced(old, module);
+  }
 
   /// Registers [module] as one of the [builtIns]: after the built-ins
   /// already there, ahead of every other module.
   void registerBuiltIn(EditorModule module) {
+    final old = _modules[module.id];
     final others = {
       for (final e in _modules.entries)
         if (!_builtIn.contains(e.key) && e.key != module.id) e.key: e.value,
@@ -413,6 +457,7 @@ class ModuleRegistry {
     _modules[module.id] = module;
     _modules.addAll(others);
     _builtIn.add(module.id);
+    _replaced(old, module);
   }
 
   /// Registers several modules.
@@ -421,7 +466,14 @@ class ModuleRegistry {
   /// Removes a module.
   void unregister(String id) {
     _builtIn.remove(id);
-    _modules.remove(id)?.dispose();
+    _failingUpdate.remove(id);
+    final gone = _modules.remove(id);
+    if (gone == null) return;
+    try {
+      gone.dispose();
+    } catch (error, stack) {
+      _report(gone, 'disposing it', error, stack);
+    }
   }
 
   /// Every component group declared by a module, in registration order.
@@ -429,10 +481,15 @@ class ModuleRegistry {
     for (final m in _modules.values) ...m.componentGroups,
   ];
 
-  /// Forwards a scene load.
+  /// Forwards a scene load. A module that throws is reported, and the
+  /// others still hear of it.
   void notifySceneOpened(String sceneName) {
-    for (final m in _modules.values) {
-      m.onSceneOpened(sceneName);
+    for (final m in _modules.values.toList()) {
+      try {
+        m.onSceneOpened(sceneName);
+      } catch (error, stack) {
+        _report(m, 'opening scene "$sceneName"', error, stack);
+      }
     }
   }
 
@@ -450,36 +507,31 @@ class ModuleRegistry {
     return failed;
   }
 
-  /// Forwards an editor tick.
+  /// Forwards an editor tick. A module that throws is reported — once,
+  /// not every frame — and the others still tick.
   void notifyUpdate(double dt) {
-    for (final m in _modules.values) {
-      m.onUpdate(dt);
+    for (final m in _modules.values.toList()) {
+      try {
+        m.onUpdate(dt);
+        _failingUpdate.remove(m.id);
+      } catch (error, stack) {
+        if (_failingUpdate.add(m.id)) _report(m, 'updating', error, stack);
+      }
     }
   }
 
-  /// Disposes every module and forgets them.
+  /// Disposes every module and forgets them. One that throws is reported;
+  /// the rest are still disposed.
   void disposeAll() {
-    for (final m in _modules.values) {
-      m.dispose();
+    for (final m in _modules.values.toList()) {
+      try {
+        m.dispose();
+      } catch (error, stack) {
+        _report(m, 'disposing it', error, stack);
+      }
     }
     _modules.clear();
     _builtIn.clear();
-  }
-}
-
-/// The data-file endings the registered modules declared; see
-/// [EditorModule.dataFileSuffixes]. Filled in by [EditorScope.reload], read
-/// by the checks that must tell a module's JSON from a sprite atlas.
-abstract final class ModuleDataFiles {
-  static final Set<String> _suffixes = {};
-
-  /// Every ending declared, lower case.
-  static Set<String> get suffixes => Set.unmodifiable(_suffixes);
-
-  /// Replaces the set — once per registration pass.
-  static void replace(Iterable<String> suffixes) {
-    _suffixes
-      ..clear()
-      ..addAll(suffixes.map((s) => s.toLowerCase()));
+    _failingUpdate.clear();
   }
 }

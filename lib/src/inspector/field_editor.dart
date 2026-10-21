@@ -7,7 +7,6 @@ import '../look/widgets/scrubbable_number_field.dart' show NumberScrubConfig;
 import 'field_rows.dart';
 import 'live_preview.dart';
 
-/// Builds the inspector control for one field.
 /// What [component]'s unset colour field [field] falls back to, or null
 /// when this lookup has nothing to say about it.
 typedef InheritedColor =
@@ -16,6 +15,7 @@ typedef InheritedColor =
       String field,
     );
 
+/// Builds the inspector control for one field.
 typedef FieldEditorBuilder = Widget Function(FieldEditorContext context);
 
 /// Everything a field editor is given: the field, its hint, the live value,
@@ -62,10 +62,14 @@ class FieldEditorContext {
   /// Null where there is no scene to ask.
   final List<String> Function()? entityNames;
 
-  /// The world the inspector is editing, and its selection, when that is
-  /// not the scene's — a screen in the interface editor. A field that
-  /// points at other entities looks them up here, not in the level.
+  /// The world the inspector is editing, when that is not the scene's — a
+  /// screen in the interface editor. A field that points at other entities
+  /// looks them up here, not in the level.
   final jge.World? world;
+
+  /// The state of the document being edited — its selection, its 2-D or
+  /// 3-D editing mode — which is a workspace's own for a screen. Null where
+  /// the inspector was given none.
   final EditorSceneState? sceneState;
 
   /// The editor the inspector belongs to — its tag list, its spawners.

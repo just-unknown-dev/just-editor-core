@@ -7,10 +7,14 @@ import 'overlay_ui_settings.dart';
 /// A preference a module keeps in the editor's settings store, typed.
 ///
 /// ```dart
-/// static const showWaves = SettingPref.boolean('mygame.showWaves', true);
+/// static SettingPref<bool> get showWaves =>
+///     SettingPref.boolean('mygame.showWaves', true);
 /// final on = scope.prefs.get(showWaves);
 /// ```
 class SettingPref<T> {
+  /// A preference of any type, kept under [key] as the text [encode] makes
+  /// of it and read back with [decode]. The static helpers below make the
+  /// common ones.
   const SettingPref(
     this.key, {
     required this.defaultValue,
@@ -18,6 +22,8 @@ class SettingPref<T> {
     required this.decode,
   });
 
+  /// A true/false preference, stored as `true` or `false`; anything else
+  /// reads as false.
   static SettingPref<bool> boolean(String key, bool defaultValue) =>
       SettingPref(
         key,
@@ -26,6 +32,8 @@ class SettingPref<T> {
         decode: (raw) => raw == 'true',
       );
 
+  /// A whole-number preference; a stored value that is not one reads as
+  /// [defaultValue].
   static SettingPref<int> integer(String key, int defaultValue) => SettingPref(
     key,
     defaultValue: defaultValue,
@@ -33,6 +41,8 @@ class SettingPref<T> {
     decode: (raw) => int.tryParse(raw) ?? defaultValue,
   );
 
+  /// A number preference; a stored value that is not a number reads as
+  /// [defaultValue].
   static SettingPref<double> decimal(String key, double defaultValue) =>
       SettingPref(
         key,
@@ -41,6 +51,7 @@ class SettingPref<T> {
         decode: (raw) => double.tryParse(raw) ?? defaultValue,
       );
 
+  /// A text preference, stored as it is.
   static SettingPref<String> text(String key, String defaultValue) =>
       SettingPref(
         key,
@@ -51,19 +62,29 @@ class SettingPref<T> {
 
   /// Namespaced: `'mygame.showWaves'`.
   final String key;
+
+  /// What [EditorPrefs.get] gives while nothing is stored under [key].
   final T defaultValue;
+
+  /// The text a value is stored as.
   final String Function(T value) encode;
+
+  /// The value stored text stands for. It is handed whatever is stored
+  /// under [key], so it should give a fallback for text it cannot read.
   final T Function(String raw) decode;
 }
 
 /// One editor's persisted preferences: the built-in overlay settings, typed,
 /// and an open set of keys for whatever a module wants to remember.
 ///
-/// Owned by the scope. Loads once, on first use, from the same store the
-/// editor always wrote to, so nothing anyone saved before is lost.
+/// Owned by the scope. Reads [store] once, when [load] is first called;
+/// until it has, [settings] starts at the defaults and [get] gives a
+/// preference's default unless it has been set since.
 class EditorPrefs {
   EditorPrefs({required this.store});
 
+  /// Where the preferences are read from and written to: the editor's own
+  /// key-value store.
   final OverlaySettingsStore store;
 
   /// The built-in overlay settings. Watch it to rebuild on a change.
@@ -151,16 +172,8 @@ class EditorPrefs {
     return _DecodedListenable(raw, pref);
   }
 
-  /// Raw access, for chrome that stored plain keys before prefs existed.
-  Future<bool> readBool(String key, {required bool fallback}) =>
-      store.readBoolByKey(key, fallback: fallback);
-  Future<void> writeBool(String key, bool value) =>
-      store.writeBoolByKey(key, value);
-  Future<int> readInt(String key, {required int fallback}) =>
-      store.readIntByKey(key, fallback: fallback);
-  Future<void> writeInt(String key, int value) =>
-      store.writeIntByKey(key, value);
-
+  /// Disposes [settings] and every view [watch] handed out; the scope calls
+  /// it when it is disposed.
   void dispose() {
     settings.dispose();
     for (final n in _watched.values) {

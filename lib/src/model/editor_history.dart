@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:just_signals/just_signals.dart';
 
 /// One reversible editor action.
@@ -31,6 +32,8 @@ abstract class EditorCommand {
 /// A command built from two closures, for actions simple enough that a named
 /// class would be noise.
 class CallbackCommand extends EditorCommand {
+  /// `onRedo` performs the action, the first time and on every redo;
+  /// `onUndo` reverses it.
   CallbackCommand({
     required this.label,
     required void Function() onRedo,
@@ -51,11 +54,14 @@ class CallbackCommand extends EditorCommand {
   void undo() => _undo();
 }
 
-/// Undo/redo stack for the Level Designer.
+/// The editor's undo/redo stack: one for the whole editor (the scope's),
+/// the Level Designer included.
 ///
 /// Exposes its state as signals so toolbar buttons bind directly instead of
 /// polling or being told to rebuild.
 class EditorHistory {
+  /// Keeps at most [capacity] steps: 200 unless given, and never fewer
+  /// than 1.
   EditorHistory({int capacity = 200}) : _capacity = math.max(1, capacity);
 
   /// How many commands are retained. Older ones are dropped from the bottom.
@@ -71,10 +77,22 @@ class EditorHistory {
     _capacity = next;
     if (_undoStack.length > next) {
       batch(() {
-        _undoStack.removeRange(0, _undoStack.length - next);
+        _trim(_undoStack.length - next);
         _publish();
       });
     }
+  }
+
+  /// Drops the [count] oldest steps. Once one is gone it cannot be undone,
+  /// so a save made before it — or at the empty stack below it — can never
+  /// be on top again: the document stays dirty until the next save.
+  void _trim(int count) {
+    if (count <= 0) return;
+    final dropped = _undoStack.sublist(0, count);
+    if (_savedTop == null || dropped.any((c) => identical(c, _savedTop))) {
+      _saveReachable = false;
+    }
+    _undoStack.removeRange(0, count);
   }
 
   final List<EditorCommand> _undoStack = [];
@@ -103,6 +121,11 @@ class EditorHistory {
   /// stack — so the document is clean exactly when that is on top again.
   EditorCommand? _savedTop;
 
+  /// Whether undo or redo can still get back to what was saved: false once
+  /// the step it rests on was trimmed away, a step failed half-way, or the
+  /// history was cleared over unsaved changes.
+  bool _saveReachable = true;
+
   /// Whether the next push must stand alone; see [breakMerge].
   bool _noMerge = false;
 
@@ -112,6 +135,7 @@ class EditorHistory {
   /// be a different state wearing the saved one's name.
   void markSaved() {
     _savedTop = _undoStack.isEmpty ? null : _undoStack.last;
+    _saveReachable = true;
     _publish();
   }
 
@@ -153,7 +177,7 @@ class EditorHistory {
         // Absorbed into the previous command; nothing new to stack.
       } else {
         _undoStack.add(command);
-        if (_undoStack.length > _capacity) _undoStack.removeAt(0);
+        _trim(_undoStack.length - _capacity);
       }
       _noMerge = false;
 
@@ -173,14 +197,13 @@ class EditorHistory {
           !_mayMergeInto(_undoStack.last) ||
           !_undoStack.last.mergeWith(command)) {
         _undoStack.add(command);
-        if (_undoStack.length > _capacity) _undoStack.removeAt(0);
+        _trim(_undoStack.length - _capacity);
       }
       _noMerge = false;
       _publish();
     });
   }
 
-  /// Reverses the most recent command.
   /// What has been done, oldest first.
   List<EditorCommand> get undoEntries => List.unmodifiable(_undoStack);
 
@@ -203,31 +226,53 @@ class EditorHistory {
     }
   }
 
+  /// Reverses the most recent command.
+  ///
+  /// A command that throws is reported (`FlutterError.reportError`) and
+  /// dropped: what it left half-done cannot be trusted to undo or redo
+  /// again. The buttons and labels are brought up to date either way, and
+  /// the document reads dirty until it is saved.
   void undo() {
     if (_undoStack.isEmpty) return;
     final command = _undoStack.removeLast();
-    _isApplying = true;
-    try {
-      batch(() {
-        command.undo();
-        _redoStack.add(command);
-        _publish();
-      });
-    } finally {
-      _isApplying = false;
-    }
+    _apply(command, 'undoing', () {
+      command.undo();
+      _redoStack.add(command);
+    });
   }
 
-  /// Replays the most recently undone command.
+  /// Replays the most recently undone command; see [undo] for one that
+  /// throws.
   void redo() {
     if (_redoStack.isEmpty) return;
     final command = _redoStack.removeLast();
+    _apply(command, 'redoing', () {
+      command.redo();
+      _undoStack.add(command);
+    });
+  }
+
+  void _apply(EditorCommand command, String doing, void Function() run) {
     _isApplying = true;
     try {
       batch(() {
-        command.redo();
-        _undoStack.add(command);
-        _publish();
+        try {
+          run();
+        } catch (error, stack) {
+          _saveReachable = false;
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stack,
+              library: 'just_editor_core',
+              context: ErrorDescription(
+                'while $doing "${command.label}" (the step was dropped)',
+              ),
+            ),
+          );
+        } finally {
+          _publish();
+        }
       });
     } finally {
       _isApplying = false;
@@ -239,10 +284,43 @@ class EditorHistory {
   /// Essential rather than tidy: a command holds entity references from the
   /// scene it was recorded in, so undoing across a scene load would write into
   /// destroyed entities.
+  ///
+  /// What is applied becomes the new starting point, and reads clean: the
+  /// save point of what came before means nothing to it. (Clearing a
+  /// document that still has unsaved changes is the caller's to guard.)
   void clear() {
     batch(() {
+      _saveReachable = true;
+      _savedTop = null;
       _undoStack.clear();
       _redoStack.clear();
+      _publish();
+    });
+  }
+
+  /// What the history holds now — every step done and every step undone —
+  /// to go back to with [restore].
+  ///
+  /// A play-test takes one when it starts and goes back to it when it
+  /// stops: whatever was done while the game ran was done to a world that
+  /// Stop puts back as authored, so undoing it afterwards would move the
+  /// authored level to where the play-test had it.
+  EditorHistoryMark mark() =>
+      EditorHistoryMark._(List.of(_undoStack), List.of(_redoStack));
+
+  /// Puts the history back as it was at [mark], running nothing: what was
+  /// done since is dropped, and what was undone since is a step done again.
+  /// For a world that has itself been put back as it was then.
+  void restore(EditorHistoryMark mark) {
+    batch(() {
+      _undoStack
+        ..clear()
+        ..addAll(mark._undo);
+      _redoStack
+        ..clear()
+        ..addAll(mark._redo);
+      // Folding the next edit into a step from before would make it one.
+      _noMerge = true;
       _publish();
     });
   }
@@ -252,10 +330,9 @@ class EditorHistory {
     canRedo.value = _redoStack.isNotEmpty;
     nextUndoLabel.value = _undoStack.isEmpty ? null : _undoStack.last.label;
     nextRedoLabel.value = _redoStack.isEmpty ? null : _redoStack.last.label;
-    dirty.value = !identical(
-      _undoStack.isEmpty ? null : _undoStack.last,
-      _savedTop,
-    );
+    dirty.value =
+        !_saveReachable ||
+        !identical(_undoStack.isEmpty ? null : _undoStack.last, _savedTop);
     revision.value = revision.value + 1;
   }
 
@@ -274,4 +351,13 @@ class EditorHistory {
     revision.dispose();
     dirty.dispose();
   }
+}
+
+/// An [EditorHistory] as it was at one moment ([EditorHistory.mark]), to go
+/// back to ([EditorHistory.restore]).
+final class EditorHistoryMark {
+  EditorHistoryMark._(this._undo, this._redo);
+
+  final List<EditorCommand> _undo;
+  final List<EditorCommand> _redo;
 }

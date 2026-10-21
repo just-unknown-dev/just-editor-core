@@ -26,7 +26,12 @@ enum ArrayMode3D {
 /// about [about] (its position, and its own turn when [turnsItself]), then
 /// moved by [move].
 final class ArrayStep3D {
-  const ArrayStep3D(this.move, this.turn, this.about, {this.turnsItself = false});
+  const ArrayStep3D(
+    this.move,
+    this.turn,
+    this.about, {
+    this.turnsItself = false,
+  });
 
   /// How far it moves.
   final jge.Vector3 move;
@@ -71,21 +76,32 @@ final class Array3DSpec {
     this.faceCentre = true,
   });
 
+  /// How the copies are laid out, which picks the fields that count.
   final ArrayMode3D mode;
 
-  /// In a row: how many, and the step from one to the next (metres).
+  /// In a row: how many.
   final int count;
+
+  /// In a row: the step from one to the next along X, Y and Z (metres; +Y
+  /// is down).
   final double stepX, stepY, stepZ;
 
-  /// In a grid: how many along X, up, and along Z, and how far apart.
+  /// In a grid: how many along X, up, and along Z.
   final int columns, floors, rows;
+
+  /// In a grid: how far apart along X, up, and along Z (metres).
   final double spacingX, spacingY, spacingZ;
 
-  /// Round a circle: how many, its radius, how far round they go
-  /// (degrees; 360 for all the way), and whether each turns to face the
-  /// middle as the original does.
+  /// Round a circle: how many.
   final int around;
+
+  /// Round a circle: its radius (metres), and how far round they go
+  /// (degrees; 360 for all the way). The middle is [radius] along -X from
+  /// the original.
   final double radius, sweep;
+
+  /// Round a circle: whether each copy turns as it goes round, so it faces
+  /// the middle as the original does, or only moves.
   final bool faceCentre;
 
   /// How many things there are when it is made, the original among them.
@@ -105,7 +121,11 @@ final class Array3DSpec {
       case ArrayMode3D.linear:
         return [
           for (var i = 1; i < count; i++)
-            ArrayStep3D(jge.Vector3(stepX * i, stepY * i, stepZ * i), none, pivot),
+            ArrayStep3D(
+              jge.Vector3(stepX * i, stepY * i, stepZ * i),
+              none,
+              pivot,
+            ),
         ];
       case ArrayMode3D.grid:
         return [
@@ -139,6 +159,7 @@ final class Array3DSpec {
     }
   }
 
+  /// This spec with the given fields changed.
   Array3DSpec copyWith({
     ArrayMode3D? mode,
     int? count,

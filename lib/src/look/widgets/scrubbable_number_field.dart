@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import '../editor_constants.dart';
 import '../kit/fields.dart' show PendingFieldEdits, isEscapeDown;
 
-/// Drag-to-scrub configuration for numeric inspector fields.
+/// Drag-to-scrub configuration for numeric inspector fields: how far a drag
+/// moves the value, how it is written, and the limits it is kept within.
 class NumberScrubConfig {
   const NumberScrubConfig({
     this.step = 1.0,
@@ -18,17 +19,37 @@ class NumberScrubConfig {
     this.suffix,
   });
 
+  /// What one step of a drag adds or takes off: the value moves by this for
+  /// every [pixelsPerStep] dragged. 1 by default.
   final double step;
+
+  /// Horizontal drag distance per [step], in logical pixels; 12 by default.
   final double pixelsPerStep;
+
+  /// Decimal places the value is written with, 2 by default; ignored when
+  /// [integer].
   final int fractionDigits;
+
+  /// The lowest value a drag or a typed number gives; null for no lower
+  /// limit.
   final double? min;
+
+  /// The highest value a drag or a typed number gives; null for no upper
+  /// limit.
   final double? max;
+
+  /// Whether the value is whole: a drag moves it in whole numbers and it is
+  /// written with no decimals. Off by default.
   final bool integer;
 
   /// The unit shown after the value — `px`, `/s` — or none.
   final String? suffix;
 }
 
+/// A number box whose label is its drag handle: drag the label sideways to
+/// scrub the value by the config's step, or type a number and keep it with
+/// Enter, Tab or a click elsewhere. Esc, with a change typed, puts back what
+/// was there; text that is not a finite number is refused the same way.
 class ScrubbableNumberField extends StatefulWidget {
   const ScrubbableNumberField({
     super.key,
@@ -42,11 +63,30 @@ class ScrubbableNumberField extends StatefulWidget {
     this.labelColor,
   });
 
+  /// The name beside the box (inside it with [labelInside]); dragging it
+  /// scrubs the value.
   final String label;
+
+  /// Holds the value as text, owned by the caller. The field writes the
+  /// scrubbed or clamped value here before calling [onCommit], which reads
+  /// it back.
   final TextEditingController controller;
+
+  /// The text field's focus, owned by the caller. Leaving it keeps what was
+  /// typed.
   final FocusNode focusNode;
+
+  /// Called when a value is kept: each drag step that changes the text, and
+  /// a typed change kept by Enter, by leaving the field, or by a command
+  /// such as Save that runs while it is typed in. The new value is in
+  /// [controller].
   final VoidCallback onCommit;
+
+  /// Step, drag speed, digits, limits and unit.
   final NumberScrubConfig config;
+
+  /// Width of the label column in logical pixels when the label is not
+  /// inside the box; 52 by default.
   final double labelWidth;
 
   /// Draw the label inside the box, before the value, instead of in a
@@ -95,8 +135,8 @@ class _ScrubbableNumberFieldState extends State<ScrubbableNumberField> {
   }
 
   /// Taking the keyboard remembers what is there; leaving it — Tab, a click
-  /// anywhere else — keeps what was typed, as Enter does. A value typed and
-  /// left used to stay on screen without ever reaching the component.
+  /// anywhere else — keeps what was typed, as Enter does, so a value typed
+  /// and left reaches the component.
   void _onFocus() {
     if (widget.focusNode.hasFocus) {
       _kept = widget.controller.text;
@@ -109,12 +149,14 @@ class _ScrubbableNumberFieldState extends State<ScrubbableNumberField> {
 
   /// Keeps what was typed, once per change: on Enter, on leaving the field,
   /// and before a command that runs while it is typed in (Save). Text that
-  /// is not a number puts back what was there rather than writing 0.
+  /// is not a number — or is one no component can hold and no scene can
+  /// save: `Infinity`, `NaN`, `1e999` — puts back what was there rather
+  /// than writing it.
   void _keep() {
     if (!mounted) return;
     final text = widget.controller.text;
     if (text == _kept) return;
-    if (double.tryParse(text.trim()) == null) {
+    if (_number(text) == null) {
       if (_kept != null) widget.controller.text = _kept!;
       return;
     }
@@ -133,9 +175,14 @@ class _ScrubbableNumberFieldState extends State<ScrubbableNumberField> {
     return KeyEventResult.handled;
   }
 
-  double _parseCurrentValue() {
-    return double.tryParse(widget.controller.text.trim()) ?? 0.0;
+  /// [text] as a number, or null when it is none — or not a finite one,
+  /// which `double.tryParse` reads `Infinity`, `NaN` and `1e999` as.
+  static double? _number(String text) {
+    final value = double.tryParse(text.trim());
+    return value != null && value.isFinite ? value : null;
   }
+
+  double _parseCurrentValue() => _number(widget.controller.text) ?? 0.0;
 
   double _clampValue(double value) {
     var result = value;
@@ -190,10 +237,10 @@ class _ScrubbableNumberFieldState extends State<ScrubbableNumberField> {
     });
   }
 
-  /// Clamps whatever the user typed to [NumberScrubConfig.min]/[max] before
-  /// notifying [onCommit] — drag-scrubbing already clamps via [_onDragUpdate],
-  /// but typing a value directly and pressing Enter/Tab used to bypass that
-  /// entirely and commit an out-of-range value straight to the component.
+  /// Clamps what was typed to the config's [NumberScrubConfig.min] and
+  /// [NumberScrubConfig.max], and writes it as the config says, before
+  /// calling `widget.onCommit` — so a typed value stays in range as a
+  /// scrubbed one does ([_onDragUpdate] clamps too).
   void _commit() {
     final clamped = _clampValue(_parseCurrentValue());
     final text = _formatValue(clamped);

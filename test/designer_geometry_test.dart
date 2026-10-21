@@ -66,18 +66,18 @@ void main() {
 
   group('greedyMerge', () {
     test('an empty set merges to nothing', () {
-      expect(DesignerGeometry.greedyMerge({}), isEmpty);
+      expect(SquareGrid.mergeCells({}), isEmpty);
     });
 
     test('a single cell becomes a 1x1 rect', () {
-      final rects = DesignerGeometry.greedyMerge({const Point2(3, 4)});
+      final rects = SquareGrid.mergeCells({const Point2(3, 4)});
 
       expect(rects, hasLength(1));
       expect(rects.single, const Rect.fromLTWH(3, 4, 1, 1));
     });
 
     test('a horizontal run becomes one rect', () {
-      final rects = DesignerGeometry.greedyMerge({
+      final rects = SquareGrid.mergeCells({
         const Point2(0, 0),
         const Point2(1, 0),
         const Point2(2, 0),
@@ -96,7 +96,7 @@ void main() {
         }
       }
 
-      final rects = DesignerGeometry.greedyMerge(cells);
+      final rects = SquareGrid.mergeCells(cells);
 
       expect(
         rects,
@@ -117,7 +117,7 @@ void main() {
         const Point2(2, 2),
       };
 
-      final rects = DesignerGeometry.greedyMerge(cells);
+      final rects = SquareGrid.mergeCells(cells);
 
       final covered = <Point2>{};
       for (final rect in rects) {
@@ -147,14 +147,14 @@ void main() {
         const Point2(2, 0),
       };
 
-      final first = DesignerGeometry.greedyMerge(Set.of(cells));
-      final second = DesignerGeometry.greedyMerge(Set.of(cells));
+      final first = SquareGrid.mergeCells(Set.of(cells));
+      final second = SquareGrid.mergeCells(Set.of(cells));
 
       expect(first, equals(second));
     });
 
     test('disjoint islands stay separate', () {
-      final rects = DesignerGeometry.greedyMerge({
+      final rects = SquareGrid.mergeCells({
         const Point2(0, 0),
         const Point2(10, 10),
       });
@@ -166,17 +166,17 @@ void main() {
   group('cells', () {
     test('cellAt floors toward negative infinity', () {
       expect(
-        DesignerGeometry.cellAt(const Offset(33, 65), 32),
+        const SquareGrid().cellAt(const Offset(33, 65), 32),
         const Point2(1, 2),
       );
       expect(
-        DesignerGeometry.cellAt(const Offset(-1, -1), 32),
+        const SquareGrid().cellAt(const Offset(-1, -1), 32),
         const Point2(-1, -1),
       );
     });
 
     test('cellsIn covers a rect spanning several cells', () {
-      final cells = DesignerGeometry.cellsIn(
+      final cells = const SquareGrid().cellsIn(
         const Rect.fromLTWH(0, 0, 64, 64),
         32,
       );
@@ -187,7 +187,7 @@ void main() {
     });
 
     test('a zero-size rect still yields the cell it sits in', () {
-      final cells = DesignerGeometry.cellsIn(
+      final cells = const SquareGrid().cellsIn(
         const Rect.fromLTWH(40, 40, 0, 0),
         32,
       );

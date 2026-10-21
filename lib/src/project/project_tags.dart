@@ -2,11 +2,13 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 import 'dart:ui' show Color;
 
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 import 'package:just_signals/just_signals.dart';
+
+import '../../io.dart';
+import '../services/project_files.dart';
 
 /// The tags a project knows, from three places:
 ///
@@ -25,8 +27,16 @@ import 'package:just_signals/just_signals.dart';
 /// tags its scenes already carry; the file is written with the first
 /// change. Every change writes it.
 class ProjectTags {
-  ProjectTags({required this.path, List<jge.Spawner> Function()? spawners})
-    : _spawners = spawners ?? (() => const []);
+  /// The tags kept in the file at [path]. `spawners` gives the game's
+  /// spawners whenever asked; `onProblem` is told, in words, of each read
+  /// or write that fails. Nothing is read until [load], or the first
+  /// question that needs the list.
+  ProjectTags({
+    required this.path,
+    List<jge.Spawner> Function()? spawners,
+    void Function(String problem)? onProblem,
+  }) : _spawners = spawners ?? (() => const []),
+       _onProblem = onProblem;
 
   /// The tag file of the project the editor runs in — or, for a store
   /// rooted elsewhere (a test's temporary directory), `tags.json` there.
@@ -59,6 +69,20 @@ class ProjectTags {
   String? get loadError => _loadError;
   String? _loadError;
 
+  /// What went wrong writing the file last time, or null.
+  String? get writeError => _writeError;
+  String? _writeError;
+
+  /// Whether the tag file is there but could not be read — broken JSON, a
+  /// newer engine's, unreadable — so it is left as it is: nothing is
+  /// written over it, and no change is made, until it reads ([load]).
+  bool get isUnreadable => _unreadable;
+  bool _unreadable = false;
+
+  final void Function(String problem)? _onProblem;
+
+  Iterable<String> Function()? _seed;
+
   /// Sets the tags code declares — the engine's and every module's. Called
   /// on each registration pass.
   void setDeclared(Iterable<jge.TagDefinition> declared) {
@@ -67,19 +91,39 @@ class ProjectTags {
   }
 
   /// Reads the tag file. Without one, [seed] — the tags the project's
-  /// scenes carry — stands in for it until the first change writes it.
+  /// scenes carry — stands in for it until the first change writes it. Read
+  /// again without one, the [seed] given before is used.
+  ///
+  /// A file that is there but cannot be read is left as it is: the list is
+  /// the declared tags alone, [loadError] says why, and every change is
+  /// refused ([isUnreadable]) until the file is fixed and read again — so
+  /// the list is never written over the project's tags.
   void load({Iterable<String> Function()? seed}) {
     _loadError = null;
+    _unreadable = false;
+    final from = _seed = seed ?? _seed;
     final file = File(path);
-    if (file.existsSync()) {
-      try {
+    try {
+      if (file.existsSync()) {
         _file = jge.TagLibrary.fromJson(jsonDecode(file.readAsStringSync()));
-      } on FormatException catch (e) {
-        _loadError = 'The tag file is not valid JSON: ${e.message}';
-        _file = jge.TagLibrary.empty;
+      } else {
+        _file = jge.TagLibrary.empty.withNames(from?.call() ?? const []);
       }
-    } else {
-      _file = jge.TagLibrary.empty.withNames(seed?.call() ?? const []);
+    } on Object catch (e) {
+      _unreadable = file.existsSync();
+      _file = jge.TagLibrary.empty;
+      final why = switch (e) {
+        jge.UnsupportedFormatVersionException() => '$e',
+        FormatException(:final message) =>
+          'The tag file is not valid: $message',
+        FileSystemException(:final message) => 'Could not read $path: $message',
+        _ => 'The tag file is not valid: $e',
+      };
+      _loadError = _unreadable
+          ? '$why It is left as it is: fix it and read it again to change '
+                'tags.'
+          : 'Could not find the tags the scenes carry: $e';
+      _onProblem?.call(_loadError!);
     }
     _loaded = true;
     _publish();
@@ -119,11 +163,15 @@ class ProjectTags {
     ];
   }
 
+  /// The listed tag called [name], declared ones included; null when it is
+  /// not on the list.
   jge.TagDefinition? operator [](String name) {
     _ensureLoaded();
     return library.value[name];
   }
 
+  /// [tag]'s chip colour: its own, or one picked from its name, the same
+  /// on every run.
   Color colorOf(String tag) => library.value.colorOf(tag);
 
   /// The listed tag [name] most likely meant, or null.
@@ -157,7 +205,7 @@ class ProjectTags {
       color: color ?? jge.TagLibrary.colorFor(name),
       description: description,
     );
-    _write(_file.put(tag));
+    if (!_write(_file.put(tag))) return null;
     return library.value[name];
   }
 
@@ -170,50 +218,65 @@ class ProjectTags {
         if (!library.value.contains(n)) n,
     ];
     if (missing.isEmpty) return 0;
-    _write(_file.withNames(missing));
+    if (!_write(_file.withNames(missing))) return 0;
     return missing.length;
   }
 
-  /// Changes a tag's colour or description.
-  void update(jge.TagDefinition tag) {
+  /// Changes a tag's colour or description. False when the file could not
+  /// be written, and nothing changed.
+  bool update(jge.TagDefinition tag) {
     _ensureLoaded();
-    _write(_file.put(tag));
+    return _write(_file.put(tag));
   }
 
   /// Renames [from] in the list — not in the scenes: see `TagRefactor`.
-  /// Refused for a declared tag.
+  /// Refused for a declared tag, and false when the file could not be
+  /// written.
   bool rename(String from, String to) {
     _ensureLoaded();
     if (library.value[from]?.isDeclared ?? false) return false;
     final source = _file.contains(from)
         ? _file
         : _file.put(library.value[from] ?? jge.TagDefinition(from));
-    _write(source.rename(from, to));
-    return true;
+    return _write(source.rename(from, to));
   }
 
-  /// Takes [name] off the list. Refused for a declared tag.
+  /// Takes [name] off the list. Refused for a declared tag, and false when
+  /// the file could not be written.
   bool remove(String name) {
     _ensureLoaded();
     if (library.value[name]?.isDeclared ?? false) return false;
-    _write(_file.remove(name));
+    return _write(_file.remove(name));
+  }
+
+  /// Writes [next] to the file — whole or not at all — and then makes it
+  /// the list. False, with nothing changed, when the file cannot be read
+  /// ([isUnreadable]) or written ([writeError]).
+  bool _write(jge.TagLibrary next) {
+    if (_unreadable) {
+      _onProblem?.call(_loadError!);
+      return false;
+    }
+    // What the file has written is what the list shows, declared tags
+    // included, so it reads as the whole list.
+    final text = const JsonEncoder.withIndent(
+      '  ',
+    ).convert(next.withDeclared(_declared).toJson());
+    try {
+      ProjectFiles.writeStringSync(path, '$text\n');
+    } on Object catch (e) {
+      _writeError =
+          'Could not write $path: '
+          '${e is FileSystemException ? e.message : e}';
+      _onProblem?.call(_writeError!);
+      return false;
+    }
+    _writeError = null;
+    _file = next;
+    _publish();
     return true;
   }
 
-  void _write(jge.TagLibrary next) {
-    // What the file has written is what the list shows, declared tags
-    // included, so it reads as the whole list.
-    _file = next;
-    _publish();
-    final file = File(path);
-    file.parent.createSync(recursive: true);
-    final text = const JsonEncoder.withIndent(
-      '  ',
-    ).convert(library.value.toJson());
-    // Written beside and moved over, so a crash never leaves half a file.
-    final saving = File('$path.saving')..writeAsStringSync('$text\n');
-    saving.renameSync(path);
-  }
-
+  /// Disposes [library]; the scope that made this calls it.
   void dispose() => library.dispose();
 }

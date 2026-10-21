@@ -12,13 +12,24 @@ import '../space_context.dart';
 import '../../view/editor_view.dart';
 
 /// Which mouse button began a gesture.
-enum ToolButton { primary, secondary, middle }
+enum ToolButton {
+  /// The main button: the left mouse button, a touch, a pen.
+  primary,
+
+  /// The right mouse button.
+  secondary,
+
+  /// The middle mouse button (the wheel, pressed).
+  middle,
+}
 
 /// A part of the tool strip: the tools that do one kind of job, under a
 /// caption.
 class ToolGroup {
   const ToolGroup({required this.id, required this.label, required this.order});
 
+  /// What a tool names in [LevelToolHandler.group] to sit in this group:
+  /// one of [ToolGroups], or a module's own.
   final String id;
 
   /// The caption, e.g. `'TILES'`.
@@ -61,8 +72,13 @@ class ToolOptionsContext {
     required this.setTool,
   });
 
+  /// The editor the designer is open in.
   final EditorScope scope;
+
+  /// Designer state: active prefab, layers, snapping.
   final LevelDesignerController controller;
+
+  /// The world being edited.
   final jge.World world;
 
   /// Switches the designer's tool.
@@ -75,6 +91,9 @@ class ToolOptionsContext {
 /// act on a stale world or camera — both can change underneath it when a
 /// scene is opened.
 class ToolContext {
+  /// The keys held come as [modifiers], or, without it, as `isShiftDown`,
+  /// `isAltDown` and `isCtrlDown`. Without a [snapper], snapping is to
+  /// other entities and then to [grid]; `stateOf` answers [stateOf].
   ToolContext({
     required this.world,
     required this.controller,
@@ -175,9 +194,10 @@ class ToolContext {
   /// selection; while resizing it grows both sides about the centre.
   bool get isAltDown => modifiers.alt;
 
-  /// Ctrl held. At the start of a gesture it adds to the selection; during a
-  /// drag it suspends snapping, so something can be placed off the grid
-  /// without turning snapping off and back on.
+  /// The primary modifier held ([ModifierKeys.control]): Ctrl, and Cmd on
+  /// macOS. At the start of a gesture it adds to the selection; during a drag it
+  /// suspends snapping, so something can be placed off the grid without
+  /// turning snapping off and back on.
   bool get isCtrlDown => modifiers.control;
 
   /// World units per screen pixel at the current zoom. Hit areas and snap
@@ -187,7 +207,8 @@ class ToolContext {
   /// The session state a module created with `createSessionState`, by type.
   T? stateOf<T extends Object>() => _stateOf?.call<T>();
 
-  /// Whether snapping applies right now, folding in the Ctrl override.
+  /// Whether snapping applies right now, folding in the Ctrl (Cmd on macOS)
+  /// override.
   bool get snapping => controller.snapEnabled.value && !isCtrlDown;
 
   /// Whether snapping to other entities applies right now.

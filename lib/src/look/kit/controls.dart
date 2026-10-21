@@ -15,15 +15,17 @@ class EditorToggle extends StatelessWidget {
     this.accent,
   });
 
+  /// Whether the switch is on.
   final bool value;
 
-  /// Null greys it out.
+  /// Called with the flipped value on a tap, Enter or Space. Null greys it
+  /// out.
   final ValueChanged<bool>? onChanged;
 
   /// What a screen reader says it switches.
   final String label;
 
-  /// The accent when null.
+  /// The switch's colour while on; [EditorTheme.accent] when null.
   final Color? accent;
 
   @override
@@ -108,9 +110,16 @@ class EditorSegmented<T> extends StatelessWidget {
     this.expand = false,
   });
 
+  /// The choice that is lit.
   final T value;
+
+  /// The choices in order, each a value and its label.
   final List<(T, String)> options;
+
+  /// Called with the value of the choice tapped, the lit one included.
   final ValueChanged<T> onChanged;
+
+  /// The lit choice's colour; [EditorTheme.accent] when null.
   final Color? accent;
 
   /// Choices shown but not available.
@@ -255,15 +264,37 @@ class EditorSlider extends StatefulWidget {
     this.unit = '',
   });
 
+  /// The value shown when no drag is under way; clamped to [min]..[max].
   final double value;
+
+  /// The slider's left end, the lowest value it gives.
   final double min;
+
+  /// The slider's right end, the highest value it gives.
   final double max;
+
+  /// What the value moves in; 0 or less moves it freely — a range worked
+  /// out as `(max - min) / 100` is 0 when the two meet.
   final double step;
+
+  /// Called with each new value a drag passes through, snapped to [step].
   final ValueChanged<double> onChanged;
+
+  /// Called with the value to keep: where a drag ends, or a typed number
+  /// that differs from [value], once it is entered or the box is left.
   final ValueChanged<double> onChangeEnd;
+
+  /// The track and thumb colour; [EditorTheme.accent] when null.
   final Color? accent;
+
+  /// What the value is multiplied by in the number box, and divided by
+  /// when a number is typed there; 1 by default.
   final double displayScale;
+
+  /// Decimal places in the number box; 0 by default.
   final int decimals;
+
+  /// Written after the number in the box (`%`, `px`); none when empty.
   final String unit;
 
   @override
@@ -279,18 +310,26 @@ class _EditorSliderState extends State<EditorSlider> {
   // The value being dragged to, until the drag ends.
   double? _dragging;
 
+  // What the box last showed or kept: text that is not a change. Enter
+  // keeps what was typed and the box then loses the focus, which keeps
+  // again — once, not twice, because the second finds nothing new.
+  late String _kept;
+
   @override
   void initState() {
     super.initState();
+    _kept = _text.text;
     _focus.addListener(_onFocus);
   }
+
+  void _show(String text) => _text.text = _kept = text;
 
   void _dragTo(double value) {
     final snapped = _snap(value);
     if (snapped == (_dragging ?? widget.value)) return;
     setState(() {
       _dragging = snapped;
-      if (!_focus.hasFocus) _text.text = _format(snapped);
+      if (!_focus.hasFocus) _show(_format(snapped));
     });
     widget.onChanged(snapped);
   }
@@ -301,7 +340,7 @@ class _EditorSliderState extends State<EditorSlider> {
     final snapped = _snap(value);
     setState(() {
       _dragging = null;
-      if (!_focus.hasFocus) _text.text = _format(widget.value);
+      if (!_focus.hasFocus) _show(_format(widget.value));
     });
     widget.onChangeEnd(snapped);
   }
@@ -311,11 +350,14 @@ class _EditorSliderState extends State<EditorSlider> {
     if (!_focus.hasFocus && mounted) _commitText();
   }
 
+  // A value changed from outside — an undo, a preset — shows at once
+  // unless something is being typed over it.
   @override
   void didUpdateWidget(covariant EditorSlider oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value && !_focus.hasFocus) {
-      _text.text = _format(widget.value);
+    if (oldWidget.value != widget.value &&
+        (!_focus.hasFocus || _text.text == _kept)) {
+      _show(_format(widget.value));
     }
   }
 
@@ -333,6 +375,7 @@ class _EditorSliderState extends State<EditorSlider> {
 
   double _snap(double value) {
     final clamped = value.clamp(widget.min, widget.max).toDouble();
+    if (widget.step <= 0) return clamped;
     final steps = ((clamped - widget.min) / widget.step).round();
     final snapped = (widget.min + steps * widget.step)
         .clamp(widget.min, widget.max)
@@ -341,21 +384,30 @@ class _EditorSliderState extends State<EditorSlider> {
     return double.parse(snapped.toStringAsFixed(6));
   }
 
+  /// Keeps what was typed, once: nothing typed since the box last showed
+  /// or kept a value is no change — and, as the box is left, shows the
+  /// value as it is now rather than one an undo has since changed.
   void _commitText() {
+    if (_text.text == _kept) {
+      if (!_focus.hasFocus) _show(_format(widget.value));
+      return;
+    }
     final typed = double.tryParse(
       _text.text.replaceAll(RegExp(r'[^0-9.\-]'), ''),
     );
-    final next = typed == null
+    final next = typed == null || !typed.isFinite
         ? widget.value
         : _snap(typed / widget.displayScale);
-    _text.text = _format(next);
+    _show(_format(next));
     if (next != widget.value) widget.onChangeEnd(next);
   }
 
   @override
   Widget build(BuildContext context) {
     final accent = widget.accent ?? EditorTheme.accent;
-    final divisions = ((widget.max - widget.min) / widget.step).round();
+    final divisions = widget.step > 0
+        ? ((widget.max - widget.min) / widget.step).round()
+        : 0;
     return Row(
       children: [
         Expanded(
@@ -421,7 +473,11 @@ class EditorSwatches extends StatelessWidget {
 
   /// Id, label, colour.
   final List<(String, String, Color)> options;
+
+  /// The id of the swatch that is ringed and ticked.
   final String selectedId;
+
+  /// Called with the id of the swatch tapped.
   final ValueChanged<String> onSelected;
 
   @override
@@ -494,14 +550,26 @@ class EditorChip extends StatelessWidget {
     this.tooltip,
   });
 
+  /// The chip's words: `Errors`.
   final String label;
+
+  /// Whether the chip is lit: tinted with [color], its text bright.
   final bool selected;
+
+  /// Called on a tap; the owner decides what [selected] becomes.
   final VoidCallback onTap;
+
+  /// The number after the label; none when null.
   final int? count;
 
-  /// The accent when [selected]; the editor's accent when null.
+  /// What the chip, its icon and its count are lit with while [selected];
+  /// [EditorTheme.primaryBright] when null.
   final Color? color;
+
+  /// An icon before the label; none when null.
   final IconData? icon;
+
+  /// Shown on a hover; none when null.
   final String? tooltip;
 
   @override
@@ -591,9 +659,10 @@ class EditorBadge extends StatelessWidget {
     this.showDot = false,
   });
 
+  /// The badge's text, shown as given in small bold type in the accent.
   final String label;
 
-  /// What it is tinted with; the accent when null.
+  /// What it is tinted with; [EditorTheme.accent] when null.
   final Color? accent;
 
   /// A leading dot, for a badge that reports a state rather than a label.
@@ -647,6 +716,7 @@ class EditorBadge extends StatelessWidget {
 class KeyCap extends StatelessWidget {
   const KeyCap(this.keys, {super.key});
 
+  /// The keys as printed, such as `Ctrl+Shift+Z`; shown as given.
   final String keys;
 
   @override

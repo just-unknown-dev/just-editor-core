@@ -16,12 +16,16 @@ class LivePreview {
     this.history,
   });
 
-  /// The value there is now.
+  /// The value there is now — a copy, never an object [write] then changes
+  /// in place (a component's own vector or list), or [restore] would put
+  /// back the previewed value instead of the one there was.
   final Object? Function() read;
 
   /// Puts a value in place without recording it, and shows it.
   final void Function(Object? value) write;
 
+  /// The editor told while the preview shows, so an autosave waits and a
+  /// save or play-test restores first; null tells nobody.
   final EditorScope? scope;
 
   /// The undo stack the kept value will be recorded on; the scope's when

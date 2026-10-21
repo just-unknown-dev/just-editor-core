@@ -132,11 +132,14 @@ abstract class Material2DWorkspaceView extends WorkspaceView {
   /// included.
   Material2DFile get shown;
 
-  /// Changes the material as [change] says, as one undo step.
+  /// Changes the material as [change] says — given what is [shown], a
+  /// variant laid over its parents — as one undo step. On a variant every
+  /// effect and value it changes becomes the variant's own; the 3-D
+  /// window's [Material3DWorkspaceView.change] does the same.
   void change(Material2DFile Function(Material2DFile m) change);
 
-  /// Shows [change] without an undo step, until [change] puts it in or
-  /// [endPreview] lets it go.
+  /// Shows [change] — given what is [shown] — without an undo step, until
+  /// [change] puts it in or [endPreview] lets it go.
   void preview(Material2DFile Function(Material2DFile m) change);
 
   /// Stops showing a [preview].
@@ -152,12 +155,13 @@ abstract class Material3DWorkspaceView extends WorkspaceView {
   /// included.
   MaterialFile get shown;
 
-  /// Changes the material as [change] says — given what is shown — as one
-  /// undo step.
+  /// Changes the material as [change] says — given what is [shown], a
+  /// variant laid over its parents — as one undo step. On a variant every
+  /// value it changes becomes the variant's own.
   void change(MaterialFile Function(MaterialFile m) change);
 
-  /// Shows [change] without an undo step, until [change] puts it in or
-  /// [endPreview] lets it go.
+  /// Shows [change] — given what is [shown] — without an undo step, until
+  /// [change] puts it in or [endPreview] lets it go.
   void preview(MaterialFile Function(MaterialFile m) change);
 
   /// Stops showing a [preview].

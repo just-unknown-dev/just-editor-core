@@ -1,10 +1,11 @@
-/// The designer's tunables that used to be literals: which grid sizes the
-/// status bar offers, which brush sizes `[` and `]` step through, how many
-/// camera bookmark slots the digit keys address.
+/// The designer's tunables: which grid sizes the status bar offers, which
+/// brush sizes `[` and `]` step through, how many camera bookmark slots the
+/// digit keys address.
 ///
 /// One per scope; pass a different one to `EditorScope(config: ...)` for a
 /// game whose tiles are 24 units or whose brushes go to 9.
 class DesignerConfig {
+  /// [bookmarkSlots] must be from 0 to 9: there are nine digit keys.
   const DesignerConfig({
     this.gridSizes = const [8, 16, 32, 64, 128],
     this.brushSizes = const [1, 3, 5],

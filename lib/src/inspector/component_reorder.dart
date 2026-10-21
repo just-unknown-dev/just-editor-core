@@ -1,8 +1,8 @@
 /// Rearranging an entity's components in the inspector: by the grip on a
 /// card's header, or from its ⋮ menu. The order is the entity's own
 /// (`Entity.reorderComponents`) — what the inspector lists and what the
-/// scene saves; the game finds components by type, so it runs as before.
-/// Transform keeps the first place.
+/// scene saves; the game finds components by type, so the order does not
+/// change how it runs. Transform keeps the first place.
 library;
 
 import 'package:flutter/foundation.dart' show listEquals;
@@ -54,8 +54,14 @@ class ComponentDrag {
     required this.title,
   });
 
+  /// The entity whose card is dragged; a drop zone of another entity
+  /// refuses it.
   final jge.Entity entity;
+
+  /// The dragged component's type (its `componentType`).
   final Type type;
+
+  /// The card's title, shown on the chip that follows the pointer.
   final String title;
 }
 
@@ -70,34 +76,55 @@ class ComponentPlacement {
     required this.move,
   });
 
+  /// The entity the card belongs to.
   final jge.Entity entity;
+
+  /// The card's component type (its `componentType`).
   final Type type;
+
+  /// The card's title — the definition's display name — for the grip's and
+  /// the menu's tooltips and the drag chip.
   final String title;
+
+  /// The movable cards' types in the order they are shown: what up, down,
+  /// top and bottom are measured by. Pinned and hidden cards are not in it.
   final List<Type> shown;
 
   /// Moves a component to just before or just after another.
   final void Function(Type type, {Type? before, Type? after}) move;
 
   int get _index => shown.indexOf(type);
+
+  /// Whether a card is shown above this one in [shown].
   bool get canMoveUp => _index > 0;
+
+  /// Whether a card is shown below this one in [shown].
   bool get canMoveDown => _index >= 0 && _index < shown.length - 1;
 
+  /// Moves the card above the one before it; nothing when [canMoveUp] is
+  /// false.
   void moveUp() {
     if (canMoveUp) move(type, before: shown[_index - 1]);
   }
 
+  /// Moves the card below the one after it; nothing when [canMoveDown] is
+  /// false.
   void moveDown() {
     if (canMoveDown) move(type, after: shown[_index + 1]);
   }
 
+  /// Moves the card above the first of [shown] (still below a pinned
+  /// Transform).
   void moveToTop() {
     if (canMoveUp) move(type, before: shown.first);
   }
 
+  /// Moves the card below the last of [shown].
   void moveToBottom() {
     if (canMoveDown) move(type, after: shown.last);
   }
 
+  /// What the card's grip carries when it is dragged.
   ComponentDrag get drag =>
       ComponentDrag(entity: entity, type: type, title: title);
 }
@@ -119,6 +146,7 @@ List<Type>? reorderedTypes(
 class ComponentDragGrip extends StatefulWidget {
   const ComponentDragGrip({super.key, required this.placement});
 
+  /// The card the grip moves: what a drag carries, and the tooltip's name.
   final ComponentPlacement placement;
 
   @override
@@ -224,13 +252,18 @@ class ComponentDropZone extends StatefulWidget {
     required this.child,
   });
 
+  /// The entity whose cards may be dropped here; a card of another entity,
+  /// or this card itself, is refused.
   final jge.Entity entity;
 
   /// The type of the card this is.
   final Type type;
 
-  /// [dragged] dropped just before ([above]) or just after this card.
+  /// The `dragged` component type was dropped just before this card
+  /// (`above` true) or just after it.
   final void Function(Type dragged, {required bool above}) onDrop;
+
+  /// The card itself; the drop line is drawn over its top or bottom edge.
   final Widget child;
 
   @override
@@ -286,6 +319,7 @@ class _ComponentDropZoneState extends State<ComponentDropZone> {
 class ComponentPlaceMenu extends StatelessWidget {
   const ComponentPlaceMenu({super.key, required this.placement});
 
+  /// The card the menu moves, and which of its moves are possible.
   final ComponentPlacement placement;
 
   Future<void> _open(BuildContext anchor) async {

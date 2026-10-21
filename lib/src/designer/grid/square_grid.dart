@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import '../designer_geometry.dart';
@@ -6,7 +7,7 @@ import 'grid_topology.dart';
 import '../../look/viewport_look.dart';
 import '../../view/editor_view.dart';
 
-/// The default grid: axis-aligned squares of [cellSize] on a side.
+/// The default grid: axis-aligned squares, `cellSize` on a side.
 class SquareGrid extends GridTopology {
   const SquareGrid();
 
@@ -169,31 +170,35 @@ class SquareGrid extends GridTopology {
     final step =
         cellSize * math.max(1, (minScreenSpacing / baseSpacing).ceil());
     const majorEvery = 5;
-    final paint = Paint()..style = PaintingStyle.stroke;
-    void line(bool major, Offset from, Offset to) {
-      paint
-        ..strokeWidth = major ? 1.2 : 0.8
-        ..color = ViewportLook.gridLine(major ? 0.14 : 0.07);
-      canvas.drawLine(from, to, paint);
-    }
+    // The lines of each weight gathered and drawn in one call: a call a
+    // line was hundreds of draws a frame.
+    final majors = <double>[], minors = <double>[];
+    void line(bool major, Offset from, Offset to) =>
+        (major ? majors : minors).addAll([from.dx, from.dy, to.dx, to.dy]);
 
-    var i = 0;
-    for (
-      var x = (minX / step).floor() * step;
-      x <= maxX + step;
-      x += step, i++
-    ) {
-      final sx = camera.worldToScreen(Offset(x, 0)).dx;
-      line(i % majorEvery == 0, Offset(sx, 0), Offset(sx, canvasSize.height));
+    // Counted from the world's origin, not from the first line in view:
+    // which lines are major is a fact of the world, and stays put as the
+    // view pans.
+    final lastX = (maxX / step).floor() + 1;
+    for (var n = (minX / step).floor(); n <= lastX; n++) {
+      final sx = camera.worldToScreen(Offset(n * step, 0)).dx;
+      line(n % majorEvery == 0, Offset(sx, 0), Offset(sx, canvasSize.height));
     }
-    i = 0;
-    for (
-      var y = (minY / step).floor() * step;
-      y <= maxY + step;
-      y += step, i++
-    ) {
-      final sy = camera.worldToScreen(Offset(0, y)).dy;
-      line(i % majorEvery == 0, Offset(0, sy), Offset(canvasSize.width, sy));
+    final lastY = (maxY / step).floor() + 1;
+    for (var n = (minY / step).floor(); n <= lastY; n++) {
+      final sy = camera.worldToScreen(Offset(0, n * step)).dy;
+      line(n % majorEvery == 0, Offset(0, sy), Offset(canvasSize.width, sy));
+    }
+    for (final (points, major) in [(minors, false), (majors, true)]) {
+      if (points.isEmpty) continue;
+      canvas.drawRawPoints(
+        PointMode.lines,
+        Float32List.fromList(points),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = major ? 1.2 : 0.8
+          ..color = ViewportLook.gridLine(major ? 0.14 : 0.07),
+      );
     }
   }
 }

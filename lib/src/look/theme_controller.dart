@@ -2,22 +2,24 @@ import 'package:flutter/widgets.dart';
 import 'package:just_signals/just_signals.dart';
 
 import '../settings/overlay_ui_settings.dart';
+import 'editor_constants.dart';
 import 'editor_theme_data.dart';
 
 /// The editor's current palette and the presets it can switch between.
 ///
-/// A scope service. The built-in presets are the five accents the settings
-/// dialog has always offered, over the classic palette; a module registers
-/// its own. Widgets read the palette with `EditorTheme.of(context)` under an
+/// A scope service. The built-in presets are five accents ([builtIn]) over
+/// the classic palette; a module registers its own. Widgets read the palette with `EditorTheme.of(context)` under an
 /// [EditorThemeScope], which the overlay root provides.
 class ThemeController {
+  /// Starts on [initial] with the built-in presets registered and none of
+  /// them selected ([currentId] null).
   ThemeController({EditorThemeData initial = EditorThemeData.classic})
     : current = Signal(initial, debugLabel: 'theme') {
     _presets.addAll(_builtInPresets());
   }
 
-  /// The five built-in accents, in the order they were once saved by index:
-  /// id, label, colour.
+  /// The five built-in accents, in the order the settings dialog offers
+  /// them: id, label, colour. The first is the default.
   static const List<(String, String, Color)> builtIn = [
     ('sunrise', 'Sunrise', Color(0xFFF5746F)),
     ('mint', 'Mint', Color(0xFF5FD7A3)),
@@ -47,8 +49,11 @@ class ThemeController {
   /// The selected preset's id, or null after [set].
   final Signal<String?> currentId = Signal(null, debugLabel: 'themePreset');
 
+  /// Every preset, the built-in ones first, then the modules' in the order
+  /// they were registered.
   List<ThemePreset> get presets => List.unmodifiable(_presets.values);
 
+  /// The preset with [id], or null when there is none.
   ThemePreset? preset(String id) => _presets[id];
 
   /// Adds or replaces a preset.
@@ -87,6 +92,8 @@ class ThemeController {
     currentId.value = null;
   }
 
+  /// Disposes [current] and [currentId]; the scope calls it when it is
+  /// disposed.
   void dispose() {
     current.dispose();
     currentId.dispose();
@@ -102,11 +109,6 @@ class EditorThemeScope extends InheritedNotifier<Signal<EditorThemeData>> {
     required super.child,
   }) : super(notifier: controller.current);
 
-  /// The palette in force at [context], or the classic one outside any scope.
-  static EditorThemeData of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<EditorThemeScope>()
-          ?.notifier
-          ?.value ??
-      EditorThemeData.classic;
+  /// The palette in force at [context]: see [EditorTheme.of].
+  static EditorThemeData of(BuildContext context) => EditorTheme.of(context);
 }

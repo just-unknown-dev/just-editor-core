@@ -30,15 +30,33 @@ class EditorIconButton extends StatelessWidget {
     this.shortcut,
   });
 
+  /// The button's icon.
   final IconData icon;
+
+  /// What the button does, shown on a hover with [shortcut] after it.
   final String tooltip;
+
+  /// Called on a tap, Enter or Space. Null greys the button out.
   final VoidCallback? onTap;
+
+  /// Whether the button is lit, for one that toggles something on. Off by
+  /// default.
   final bool isActive;
+
+  /// The icon's colour at rest, and what the button is lit with when there
+  /// is no [activeColor]. Null rests in the theme's secondary text and
+  /// lights with [EditorTheme.primaryBright].
   final Color? color;
+
+  /// What the button is lit with — its fill and icon while [isActive], its
+  /// hover tint — without tinting the icon at rest.
   final Color? activeColor;
 
   /// The button's side; [EditorMetrics.controlSm] when null.
   final double? size;
+
+  /// The icon's size in logical pixels; when null, 58% of the side, kept
+  /// between 12 and 18.
   final double? iconSize;
 
   /// The key that does the same, added to the tooltip.
@@ -105,14 +123,21 @@ class EditorToolButton extends StatefulWidget {
     this.onSecondaryTap,
   });
 
+  /// The tool's icon, unless [glyph] draws it.
   final IconData icon;
+
+  /// What the tool is, shown on a hover with [shortcut] after it.
   final String tooltip;
 
-  /// Null greys it out.
+  /// Called on a tap, Enter or Space. Null greys it out.
   final VoidCallback? onTap;
+
+  /// Whether this is the tool in hand: filled, and with [activeBar] a bar
+  /// down its left edge.
   final bool isActive;
 
-  /// What the tool in hand is lit with; the accent when null.
+  /// What the tool in hand is lit with; [EditorTheme.primaryBright] when
+  /// null.
   final Color? activeColor;
 
   /// The key that picks it: in the tooltip, and in the corner.
@@ -125,12 +150,16 @@ class EditorToolButton extends StatefulWidget {
   /// tooltip already names the key.
   final String? cornerLabel;
 
-  /// The button's size; [EditorMetrics.controlMd] square when null.
+  /// The button's width; [EditorMetrics.controlMd] when null.
   final double? width;
+
+  /// The button's height; [EditorMetrics.controlMd] when null.
   final double? height;
+
+  /// The icon's (or [glyph]'s) size in logical pixels; 17 when null.
   final double? iconSize;
 
-  /// The bar down the left edge of the tool in hand.
+  /// Whether the tool in hand has a bar down its left edge. On by default.
   final bool activeBar;
 
   /// Draws the button's picture instead of [icon], in the colour and at
@@ -285,10 +314,20 @@ class EditorButton extends StatelessWidget {
     this.autofocus = false,
   });
 
+  /// The words on the button.
   final String label;
+
+  /// Called when the button is pressed. Null disables it, greyed out.
   final VoidCallback? onPressed;
+
+  /// How the button reads: [EditorButtonKind.secondary] by default.
   final EditorButtonKind kind;
+
+  /// An icon before the label; none when null.
   final IconData? icon;
+
+  /// Whether the button takes the keyboard when it first shows, so Enter
+  /// presses it — a dialog's main choice. Off by default.
   final bool autofocus;
 
   @override

@@ -6,6 +6,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_editor_core/host.dart';
 
+import 'support/real_io.dart';
+
 void main() {
   late Directory dir;
   late AssetIndex index;
@@ -32,9 +34,10 @@ void main() {
     index = AssetIndex(projectRoot: dir.path);
     await index.scan();
   });
-  tearDown(() {
+  tearDown(() async {
     index.dispose();
-    dir.deleteSync(recursive: true);
+    // A watcher lets go of the folder a moment after it is cancelled.
+    await deleteWhenFree(dir);
   });
 
   test('it sees files and folders, by project-relative path and kind', () {
@@ -67,13 +70,11 @@ void main() {
   test('a file that appears on disk shows up by itself', () async {
     index.startWatching();
     write('assets/sprites/coin.png');
-    for (
-      var i = 0;
-      i < 40 && index.entryAt('assets/sprites/coin.png') == null;
-      i++
-    ) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
+    // Heard, then rescanned after a short pause: on the real clock.
+    await waitUntil(
+      () => index.entryAt('assets/sprites/coin.png') != null,
+      what: 'the new file to be listed',
+    );
     expect(index.entryAt('assets/sprites/coin.png'), isNotNull);
   });
 
@@ -145,5 +146,73 @@ void main() {
       contains('"assets/sprites/hero.png.bak"'),
       reason: 'untouched',
     );
+  });
+
+  test('a rename that only changes letter case works', () async {
+    expect(
+      await index.rename('assets/sprites/hero.png', 'Hero.png'),
+      'assets/sprites/Hero.png',
+    );
+    final names = Directory(
+      '${dir.path}/assets/sprites',
+    ).listSync().map((e) => e.uri.pathSegments.last).toList();
+    expect(names, contains('Hero.png'));
+    expect(names, isNot(contains('hero.png')));
+    expect(
+      File('${dir.path}/assets/sprites/Hero.png').readAsStringSync(),
+      'png-bytes',
+    );
+  });
+
+  test(
+    'the indexed folder itself cannot be renamed, copied or trashed',
+    () async {
+      await expectLater(
+        index.rename('assets', 'gone'),
+        throwsA(isA<FileSystemException>()),
+      );
+      await expectLater(
+        index.trash('assets'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(exists('assets/sprites/hero.png'), isTrue);
+    },
+  );
+
+  test('a scan asked for during another waits for a walk of its own', () async {
+    final before = index.revision.value;
+    final first = index.scan();
+    // Made while the first walk may already have passed its folder.
+    write('assets/sprites/late.png');
+    final second = index.scan();
+    final third = index.scan();
+    expect(identical(second, third), isTrue, reason: 'folded into one pass');
+    await second;
+    expect(
+      index.revision.value,
+      greaterThanOrEqualTo(before + 2),
+      reason: 'a second walk ran',
+    );
+    expect(index.entryAt('assets/sprites/late.png'), isNotNull);
+    await first;
+  });
+
+  test('a scan still running when the index goes touches nothing', () async {
+    final scanning = index.scan();
+    index.dispose();
+    await scanning; // no use of the disposed notifier, nothing thrown
+  });
+
+  test('a folder made while watching is watched too', () async {
+    index.startWatching();
+    Future<void> seen(String path) => waitUntil(
+      () => index.entryAt(path) != null,
+      what: '$path to be listed',
+    );
+
+    write('assets/levels/first.png');
+    await seen('assets/levels/first.png');
+    write('assets/levels/second.png');
+    await seen('assets/levels/second.png');
   });
 }

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 /// The editor's palette as a value, so it can change while the editor runs.
 ///
-/// [classic] is the palette the editor shipped with. A preset is usually
-/// [classic] with a different accent; a module may register a whole palette
+/// [classic] is the default palette. A preset is usually [classic] with a
+/// different accent ([withAccent]); a module may register a whole palette
 /// of its own. `EditorTheme` reads whichever is applied.
 @immutable
 class EditorThemeData {
@@ -17,7 +17,6 @@ class EditorThemeData {
     required this.dragOverBg,
     required this.multiSelectBg,
     required this.hoverBg,
-    required this.hoverBgAlt,
     required this.panelBg,
     required this.surfaceBg,
     required this.dialogBg,
@@ -35,7 +34,6 @@ class EditorThemeData {
     required this.textSecondary,
     required this.textMuted,
     required this.textBright,
-    required this.textBadge,
     required this.error,
     required this.errorLight,
     required this.warning,
@@ -43,7 +41,7 @@ class EditorThemeData {
     required this.info,
   });
 
-  /// The palette the editor shipped with: dark, warm, a coral accent.
+  /// The default palette: dark, warm, a coral accent.
   static const EditorThemeData classic = EditorThemeData(
     primary: Color(0xFFF5746F),
     primaryBright: Color(0xFFFF9C98),
@@ -54,7 +52,6 @@ class EditorThemeData {
     dragOverBg: Color(0xFF4A1E1E),
     multiSelectBg: Color(0xFF301515),
     hoverBg: Color(0xFF33201E),
-    hoverBgAlt: Color(0xFF4A2D2D),
     panelBg: Color(0xFF0F0E0E),
     surfaceBg: Color(0xFF1A1818),
     dialogBg: Color(0xFF161414),
@@ -72,7 +69,6 @@ class EditorThemeData {
     textSecondary: Color(0xFFCCCCCC),
     textMuted: Color(0xFF999999),
     textBright: Color(0xFFFFFFFF),
-    textBadge: Color(0xFFFFFFFF),
     error: Color(0xFFE54B4B),
     errorLight: Color(0xFFFF7070),
     warning: Color(0xFFFFD660),
@@ -88,18 +84,29 @@ class EditorThemeData {
       primaryMutedLight;
 
   /// Behind what is picked, dragged over, or under the pointer.
-  final Color selectionBg, dragOverBg, multiSelectBg, hoverBg, hoverBgAlt;
+  final Color selectionBg, dragOverBg, multiSelectBg, hoverBg;
 
   /// Surfaces, darkest to lightest roughly: what panels, dialogs, fields and
   /// menus are painted on.
   final Color panelBg, surfaceBg, dialogBg, inputBg, menuBg, panelRaised;
+
+  /// Surfaces darker than [panelBg], each darker than the one before: what
+  /// sits sunk into a panel, the kit's field fill, and behind the start
+  /// card.
   final Color surfaceDark, surfaceDarker, surfaceDarkest;
 
   /// [border] is the faint line between regions; [borderStrong] the line
   /// that has to be seen — a dialog's panels, a field.
   final Color border, borderStrong;
+
+  /// [buttonBg] fills a secondary button; [statusBadgeBg] a floating
+  /// toolbar or badge over the level.
   final Color buttonBg, statusBadgeBg;
-  final Color textPrimary, textSecondary, textMuted, textBright, textBadge;
+
+  /// Text: [textPrimary] for names and values, [textSecondary] for what is
+  /// read second, [textMuted] for hints and captions, [textBright] on the
+  /// accent.
+  final Color textPrimary, textSecondary, textMuted, textBright;
 
   /// What went wrong, what may, what went right, and what is merely said.
   final Color error, errorLight, warning, success, info;
@@ -124,7 +131,6 @@ class EditorThemeData {
       dragOverBg: shade(0.2),
       multiSelectBg: shade(0.14),
       hoverBg: shade(0.16),
-      hoverBgAlt: shade(0.23),
       border: shade(0.7, 0.05),
       buttonBg: shade(0.19),
       statusBadgeBg: shade(0.19, 0.9),
@@ -161,7 +167,6 @@ class EditorThemeData {
       selectionBg: lift(selectionBg, 0.1),
       multiSelectBg: lift(multiSelectBg, 0.08),
       hoverBg: lift(hoverBg, 0.08),
-      hoverBgAlt: lift(hoverBgAlt, 0.08),
     );
   }
 
@@ -177,6 +182,7 @@ class EditorThemeData {
     info: const Color(0xFFCC79A7),
   );
 
+  /// A copy with the given colours changed.
   EditorThemeData copyWith({
     Color? primary,
     Color? primaryBright,
@@ -187,7 +193,6 @@ class EditorThemeData {
     Color? dragOverBg,
     Color? multiSelectBg,
     Color? hoverBg,
-    Color? hoverBgAlt,
     Color? panelBg,
     Color? surfaceBg,
     Color? dialogBg,
@@ -205,7 +210,6 @@ class EditorThemeData {
     Color? textSecondary,
     Color? textMuted,
     Color? textBright,
-    Color? textBadge,
     Color? error,
     Color? errorLight,
     Color? warning,
@@ -221,7 +225,6 @@ class EditorThemeData {
     dragOverBg: dragOverBg ?? this.dragOverBg,
     multiSelectBg: multiSelectBg ?? this.multiSelectBg,
     hoverBg: hoverBg ?? this.hoverBg,
-    hoverBgAlt: hoverBgAlt ?? this.hoverBgAlt,
     panelBg: panelBg ?? this.panelBg,
     surfaceBg: surfaceBg ?? this.surfaceBg,
     dialogBg: dialogBg ?? this.dialogBg,
@@ -239,7 +242,6 @@ class EditorThemeData {
     textSecondary: textSecondary ?? this.textSecondary,
     textMuted: textMuted ?? this.textMuted,
     textBright: textBright ?? this.textBright,
-    textBadge: textBadge ?? this.textBadge,
     error: error ?? this.error,
     errorLight: errorLight ?? this.errorLight,
     warning: warning ?? this.warning,
@@ -255,7 +257,15 @@ class ThemePreset {
     required this.label,
     required this.data,
   });
+
+  /// What the settings save to say this preset is picked, such as
+  /// `sunrise`. A preset registered with an id already there replaces
+  /// that one.
   final String id;
+
+  /// The name the settings dialog shows.
   final String label;
+
+  /// The palette it applies.
   final EditorThemeData data;
 }

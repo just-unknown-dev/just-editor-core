@@ -8,9 +8,16 @@ import '../view/ray_entity_picker.dart';
 /// How the 3-D view draws the scene: as the game does, its colours only,
 /// its edges, or what things collide with.
 enum ViewMode3D {
+  /// As the game draws it, with its lights and shadows.
   lit('Lit', 'As the game draws it: its lights and shadows'),
+
+  /// Colours only, shaded a little so shapes read.
   unlit('Unlit', 'Colours only, shaded a little: to read shapes by'),
+
+  /// Every edge, nothing filled.
   wireframe('Wire', 'Every edge, nothing filled'),
+
+  /// The colliders, drawn over the scene unlit.
   collision('Collision', 'What things collide with, over the scene unlit');
 
   const ViewMode3D(this.label, this.description);
@@ -99,7 +106,10 @@ class Designer3DState {
 
   /// Whether what is placed stands on the surface — its up along the
   /// surface's facing — rather than upright.
-  final Signal<bool> alignToSurface = Signal(false, debugLabel: 'alignToSurface');
+  final Signal<bool> alignToSurface = Signal(
+    false,
+    debugLabel: 'alignToSurface',
+  );
 
   /// How far what is placed is spun about its up (degrees): Shift+wheel
   /// while placing.
@@ -120,7 +130,10 @@ class Designer3DState {
   final Signal<double> stampSpacing = Signal(1, debugLabel: 'stampSpacing');
 
   /// The material file in hand: what painting puts on a shape or model.
-  final Signal<String?> materialInHand = Signal(null, debugLabel: 'materialInHand');
+  final Signal<String?> materialInHand = Signal(
+    null,
+    debugLabel: 'materialInHand',
+  );
 
   /// How Array lays out copies of the selection.
   final Signal<Array3DSpec> array = Signal(
@@ -132,8 +145,7 @@ class Designer3DState {
   WorkingPlane get plane => WorkingPlane(planeAxis.value, planeOffset.value);
 
   /// Moves the plane [metres] along its normal — up for the ground.
-  void raise(double metres) =>
-      planeOffset.value = plane.moved(metres).offset;
+  void raise(double metres) => planeOffset.value = plane.moved(metres).offset;
 
   /// Turns the plane the next way round: ground, front, side.
   void cycleAxis() => planeAxis.value = planeAxis.value.next;

@@ -111,13 +111,16 @@ class TransformCommand extends EditorCommand {
 
   /// Commands with the same non-null key fold into one undo step.
   ///
-  /// Null — the default — never merges. Every gesture pushes exactly one
-  /// command already, so merging by default only ever did harm: dragging a
-  /// platform twice and pressing Ctrl+Z reverted both drags at once. A burst
-  /// of arrow-key nudges is the case that wants merging, and it opts in.
+  /// Null — the default — never merges: every gesture pushes exactly one
+  /// command, so two drags of a platform are two undo steps. A burst of
+  /// arrow-key nudges is the case that wants merging, and it opts in.
   final Object? mergeKey;
 
   /// Entities affected, aligned index-for-index with [before] and [after].
+  ///
+  /// As they were when the gesture was made: one destroyed and made again
+  /// since — a delete undone — is found as what it was made again as
+  /// ([EditorSceneState.liveEntity]).
   final List<jge.Entity> entities;
 
   /// Transforms as they were before the gesture.
@@ -136,15 +139,17 @@ class TransformCommand extends EditorCommand {
   void undo() => _apply(before);
 
   void _apply(List<TransformSnapshot> snapshots) {
-    for (var i = 0; i < entities.length; i++) {
-      final entity = entities[i];
-      if (!entity.isAlive) continue;
+    final live = [for (final e in entities) sceneState.liveEntity(e)];
+    for (var i = 0; i < live.length; i++) {
+      final entity = live[i];
+      if (entity == null) continue;
       snapshots[i].applyTo(entity);
-      sceneState.syncEntityNode(entity);
     }
     // What hangs under a restored entity goes back with it.
-    for (final entity in entities) {
-      entity.world?.transformHierarchy.propagateFrom(entity);
+    for (final entity in live) {
+      if (entity != null) {
+        entity.world?.transformHierarchy.propagateFrom(entity);
+      }
     }
     sceneState
       ..markDirty()
@@ -170,8 +175,14 @@ class TransformCommand extends EditorCommand {
 ///
 /// Holds JSON rather than live entities because undo destroys them: on redo
 /// there is nothing left to re-add, so the command has to be able to rebuild
-/// them from scratch. An entity whose spec names a parent goes back under
-/// it — found by name, as a scene file does, since ids are new each time.
+/// them from scratch. Ids are new each time; each rebuild is recorded
+/// ([EditorSceneState.entityRebuilt]), so a later command that moved or
+/// renamed one still finds it.
+///
+/// An entity whose spec names a parent goes under it: by id first
+/// ([EntitySpec.parentId]) — one made by this same command, or one already
+/// there — then by name ([EntitySpec.parentName]), preferring an entity
+/// this command made over an older one of the same name.
 class CreateEntitiesCommand extends EditorCommand {
   CreateEntitiesCommand({
     required this.label,
@@ -179,7 +190,18 @@ class CreateEntitiesCommand extends EditorCommand {
     required this.sceneState,
     required this.specs,
     this.onCreated,
-  });
+  }) : _made = List<jge.EntityId?>.filled(specs.length, null),
+       _restores = false;
+
+  CreateEntitiesCommand._adopting({
+    required this.label,
+    required this.world,
+    required this.sceneState,
+    required this.specs,
+    required List<jge.EntityId?> made,
+    this.onCreated,
+  }) : _made = made,
+       _restores = true;
 
   @override
   final String label;
@@ -196,7 +218,14 @@ class CreateEntitiesCommand extends EditorCommand {
   /// Called with the freshly created entities, e.g. to select them.
   final void Function(List<jge.Entity> created)? onCreated;
 
-  final List<jge.EntityId> _createdIds = [];
+  /// Per spec, the id its entity was last made with; null for one not made
+  /// yet (or with nothing to make).
+  final List<jge.EntityId?> _made;
+
+  /// Whether the specs are the very entities they were taken from — put
+  /// back, not copied: a prefab link to an instance outside this command
+  /// is kept, where a copy drops it and stands on its own.
+  final bool _restores;
 
   /// Records entities that already exist as having been created by this
   /// command, for [EditorHistory.pushApplied].
@@ -211,38 +240,42 @@ class CreateEntitiesCommand extends EditorCommand {
     required List<jge.Entity> entities,
     required SceneCodec codec,
     void Function(List<jge.Entity> created)? onCreated,
-  }) {
-    final command = CreateEntitiesCommand(
-      label: label,
-      world: world,
-      sceneState: sceneState,
-      specs: entities
-          .map((e) => EntitySpec.of(e, codec, world: world))
-          .toList(growable: false),
-      onCreated: onCreated,
-    );
-    command._createdIds.addAll(entities.map((e) => e.id));
-    return command;
-  }
+  }) => CreateEntitiesCommand._adopting(
+    label: label,
+    world: world,
+    sceneState: sceneState,
+    specs: entities
+        .map((e) => EntitySpec.of(e, codec, world: world))
+        .toList(growable: false),
+    made: [for (final e in entities) e.id],
+    onCreated: onCreated,
+  );
 
   @override
   void redo() {
-    _createdIds.clear();
     final created = <jge.Entity>[];
+    // What this pass has made, by the id its spec was taken from and by
+    // name: a child's parent, or an instance's top, among them.
+    final byId = <jge.EntityId, jge.Entity>{};
+    final byName = <String, jge.Entity>{};
 
-    for (final spec in specs) {
-      final components = spec.decode();
-      if (components.isEmpty) continue;
-
-      final entity = world.createEntityWithComponents(
-        components,
-        name: spec.name,
+    for (var i = 0; i < specs.length; i++) {
+      final spec = specs[i];
+      final entity = spec.build(
+        world,
+        prefabTop: (top) =>
+            byId[top]?.id ??
+            (_restores ? world.getEntity(sceneState.currentId(top))?.id : null),
       );
+      if (entity == null) continue;
+
       sceneState.registerEntity(entity);
-      final parentName = spec.parentName;
-      final parent = parentName == null
-          ? null
-          : world.findEntityByName(parentName);
+      if (_made[i] case final was?) {
+        sceneState.entityRebuilt(sceneState.currentId(was), entity);
+      }
+      _made[i] = entity.id;
+
+      final parent = _parentOf(spec, byId, byName);
       if (parent != null) {
         placeEntity(
           entity,
@@ -251,7 +284,8 @@ class CreateEntitiesCommand extends EditorCommand {
           slot: HierarchySlot(parentId: parent.id, index: spec.siblingIndex),
         );
       }
-      _createdIds.add(entity.id);
+      if (spec.id case final id?) byId[id] = entity;
+      if (entity.name case final name?) byName[name] = entity;
       created.add(entity);
     }
 
@@ -261,22 +295,88 @@ class CreateEntitiesCommand extends EditorCommand {
     onCreated?.call(created);
   }
 
+  jge.Entity? _parentOf(
+    EntitySpec spec,
+    Map<jge.EntityId, jge.Entity> byId,
+    Map<String, jge.Entity> byName,
+  ) {
+    if (spec.parentId case final id?) {
+      final found = byId[id] ?? world.getEntity(sceneState.currentId(id));
+      if (found != null) return found;
+    }
+    if (spec.parentName case final name?) {
+      return byName[name] ?? world.findEntityByName(name);
+    }
+    return null;
+  }
+
   @override
   void undo() {
     // Last made first, so a child leaves its parent before the parent goes.
-    for (final id in _createdIds.reversed) {
-      final entity = world.getEntity(id);
+    final gone = <jge.EntityId>{};
+    for (final id in _made.reversed) {
+      if (id == null) continue;
+      final entity = world.getEntity(sceneState.currentId(id));
       if (entity == null) continue;
       detachEntity(entity, world: world, sceneState: sceneState);
-      sceneState.removeEntityNode(id);
+      gone.add(entity.id);
       world.destroyEntity(entity);
     }
-    _createdIds.clear();
     sceneState
+      ..removeEntityNodes(gone)
       ..clearSelection()
       ..markDirty()
       ..refresh();
   }
+}
+
+/// What a prefab instance records on an entity it made, which no codec
+/// saves: its link (`PrefabLink`) — the instance's top entity and where in
+/// the prefab this one is — and, on the top, the instance as loaded
+/// (`PrefabInstanceComponent`).
+///
+/// Kept by an [EntitySpec] so that an entity rebuilt from one — a delete
+/// undone, a group put back — is still part of its instance, and a save
+/// still writes the instance as a `prefab` block rather than every entity
+/// of it in full.
+class PrefabOrigin {
+  /// An origin linking to the instance whose top had the id [top], at
+  /// [path] in its prefab; [block] (with [missing]) on the top itself.
+  const PrefabOrigin({this.top, this.path, this.block, this.missing = false});
+
+  /// What [entity] carries, or null for an entity no prefab made.
+  static PrefabOrigin? of(jge.Entity entity) {
+    final link = entity.getComponent<jge.PrefabLink>();
+    final instance = entity.getComponent<jge.PrefabInstanceComponent>();
+    if (link == null && instance == null) return null;
+    return PrefabOrigin(
+      top: link?.instance,
+      path: link?.path,
+      block: instance?.block,
+      missing: instance?.missing ?? false,
+    );
+  }
+
+  /// The id the instance's top entity had; null when it carried no link.
+  final jge.EntityId? top;
+
+  /// Where in the prefab the entity is; null when it carried no link.
+  final String? path;
+
+  /// The instance as loaded, on its top entity; null on the others.
+  final jge.PrefabInstance? block;
+
+  /// Whether the instance's prefab could not be read.
+  final bool missing;
+
+  /// The runtime components to put on an entity made again from it, its
+  /// link naming [top] — the instance's top as it is now. A null [top]
+  /// leaves the link off: the entity is no longer part of an instance.
+  List<jge.Component> components(jge.EntityId? top) => [
+    if (top != null && path != null) jge.PrefabLink(instance: top, path: path!),
+    if (block case final b?)
+      jge.PrefabInstanceComponent(block: b, missing: missing),
+  ];
 }
 
 /// Name plus serialized components — enough to rebuild one entity — and
@@ -288,11 +388,16 @@ class EntitySpec {
     required this.codec,
     this.parentName,
     this.siblingIndex = -1,
+    this.id,
+    this.parentId,
+    this.enabled = true,
+    this.prefab,
   });
 
-  /// Captures [entity] as it currently stands, through [codec]. With
-  /// [world], where it sits in the tree too: its parent, by name, and its
-  /// place among that parent's children.
+  /// Captures [entity] as it currently stands, through [codec]: its
+  /// components, whether it is switched on, and the prefab instance it is
+  /// part of. With [world], where it sits in the tree too: its parent, by
+  /// id and by name, and its place among that parent's children.
   factory EntitySpec.of(
     jge.Entity entity,
     SceneCodec codec, {
@@ -305,24 +410,47 @@ class EntitySpec {
       name: entity.name,
       componentsJson: json,
       codec: codec,
+      id: entity.id,
+      parentId: parent?.id,
       parentName: parent?.name,
       siblingIndex:
           parent?.getComponent<jge.ChildrenComponent>()?.childIds.indexOf(
             entity.id,
           ) ??
           -1,
+      enabled: entity.isActive,
+      prefab: PrefabOrigin.of(entity),
     );
   }
 
   /// Entity name, or null for an unnamed entity.
   final String? name;
 
-  /// The name of the entity it goes under, or null for a root. By name,
-  /// because ids are handed out again when entities are rebuilt.
+  /// The id of the entity this was taken from, or null for a spec made by
+  /// hand. What a child's [parentId] and a [prefab] link name it by.
+  final jge.EntityId? id;
+
+  /// The id of the entity it goes under, as it was when this was taken.
+  ///
+  /// Looked for before [parentName]: names need not be unique — the parts
+  /// of two instances of one prefab share them — and an id found through
+  /// [EditorSceneState.currentId] is the same entity even after it was
+  /// rebuilt. Null to go by [parentName] alone.
+  final jge.EntityId? parentId;
+
+  /// The name of the entity it goes under, or null for a root — what is
+  /// used when there is no [parentId], or that entity is gone.
   final String? parentName;
 
-  /// Its place among [parentName]'s children; -1 for after them all.
+  /// Its place among its parent's children; -1 for after them all.
   final int siblingIndex;
+
+  /// Whether the entity is switched on — the scene's `enabled` flag, which
+  /// lives on the entity, not in a component.
+  final bool enabled;
+
+  /// The prefab instance the entity is part of, or null.
+  final PrefabOrigin? prefab;
 
   /// Serialized components, in attachment order.
   final List<Map<String, dynamic>> componentsJson;
@@ -333,6 +461,37 @@ class EntitySpec {
   /// Decodes the components. Anything with no definition is kept as it
   /// was saved (`UnknownComponents`), exactly as a scene load does.
   List<jge.Component> decode() => codec.decodeAll(componentsJson);
+
+  /// Makes the entity this describes in [world]: its components, its name,
+  /// switched off if it was, and part of its prefab instance again — its
+  /// link naming the top [prefabTop] gives for the id the top had (null
+  /// drops the link; a top that is this entity itself is found without
+  /// asking). Not placed in the tree: that is the caller's.
+  ///
+  /// Null when nothing decodes — there is nothing to make — unless
+  /// [evenEmpty].
+  jge.Entity? build(
+    jge.World world, {
+    jge.EntityId? Function(jge.EntityId top)? prefabTop,
+    bool evenEmpty = false,
+  }) {
+    final components = decode();
+    if (components.isEmpty && !evenEmpty) return null;
+    final entity = world.createEntityWithComponents(components, name: name);
+    if (!enabled) entity.isActive = false;
+    final origin = prefab;
+    if (origin != null) {
+      final top = switch (origin.top) {
+        null => null,
+        final was when was == id => entity.id,
+        final was => prefabTop?.call(was),
+      };
+      for (final c in origin.components(top)) {
+        entity.addComponent(c);
+      }
+    }
+    return entity;
+  }
 
   /// Makes [entity] match this spec, in place.
   ///
@@ -371,23 +530,44 @@ class EntitySpec {
   static bool _isLink(jge.Component c) =>
       c is jge.ParentComponent || c is jge.ChildrenComponent;
 
+  /// This spec with some of it changed; the rest — where it came from,
+  /// whether it is on, its prefab instance — kept.
+  EntitySpec _with({
+    String? name,
+    List<Map<String, dynamic>>? componentsJson,
+    String? parentName,
+    jge.EntityId? parentId,
+    bool keepParent = true,
+    int? siblingIndex,
+  }) => EntitySpec(
+    name: name ?? this.name,
+    componentsJson: componentsJson ?? this.componentsJson,
+    codec: codec,
+    id: id,
+    parentId: keepParent ? this.parentId : parentId,
+    parentName: keepParent ? this.parentName : parentName,
+    siblingIndex: siblingIndex ?? this.siblingIndex,
+    enabled: enabled,
+    prefab: prefab,
+  );
+
   /// A copy with a different name, for duplicate and array operations.
   EntitySpec renamed(String? newName) => EntitySpec(
     name: newName,
     componentsJson: componentsJson,
     codec: codec,
+    id: id,
+    parentId: parentId,
     parentName: parentName,
     siblingIndex: siblingIndex,
+    enabled: enabled,
+    prefab: prefab,
   );
 
-  /// A copy that goes under [parent] — by name — at [index], or at the end.
-  EntitySpec under(String? parent, {int index = -1}) => EntitySpec(
-    name: name,
-    componentsJson: componentsJson,
-    codec: codec,
-    parentName: parent,
-    siblingIndex: index,
-  );
+  /// A copy that goes under [parent] — by name, instead of the parent it
+  /// was taken under — at [index], or at the end.
+  EntitySpec under(String? parent, {int index = -1}) =>
+      _with(parentName: parent, keepParent: false, siblingIndex: index);
 
   /// A copy whose transform [edit] changes — moved, turned, sized — for
   /// duplicate and array operations in space: under the same parent, just
@@ -406,11 +586,9 @@ class EntitySpec {
       edit(component);
       changed.add(codec.encode(component) ?? json);
     }
-    return EntitySpec(
-      name: newName ?? name,
+    return _with(
+      name: newName,
       componentsJson: changed,
-      codec: codec,
-      parentName: parentName,
       siblingIndex: siblingIndex < 0 ? -1 : siblingIndex + 1,
     );
   }
@@ -435,11 +613,9 @@ class EntitySpec {
       );
       shifted.add(codec.encode(component) ?? json);
     }
-    return EntitySpec(
-      name: newName ?? name,
+    return _with(
+      name: newName,
       componentsJson: shifted,
-      codec: codec,
-      parentName: parentName,
       siblingIndex: siblingIndex < 0 ? -1 : siblingIndex + 1,
     );
   }
@@ -449,7 +625,17 @@ class EntitySpec {
 ///
 /// The capture has to happen before the entities are destroyed, so the command
 /// snapshots in its constructor rather than in [redo].
+///
+/// A rebuilt entity has a new id (a world never gives one out twice). Each
+/// rebuild is recorded ([EditorSceneState.entityRebuilt]), so the next redo
+/// deletes what undo made, and any other command that refers to one of
+/// them — a move before the delete, a rename after the undo — still finds
+/// it. It comes back as it was: switched off if it was off, part of the
+/// prefab instance it was part of, under the parent it had and in its
+/// place among its siblings.
 class DeleteEntitiesCommand extends EditorCommand {
+  /// Captures `entities` and everything under them, parents first, through
+  /// `codec`, as they are when this is made.
   DeleteEntitiesCommand({
     required this.label,
     required this.world,
@@ -461,8 +647,9 @@ class DeleteEntitiesCommand extends EditorCommand {
     // roots is not what anyone means by deleting the card. Captured
     // parent-first so undo can rebuild it from the top down.
     final ordered = <jge.Entity>[];
+    final seen = <jge.EntityId>{};
     void collect(jge.Entity entity) {
-      if (ordered.any((e) => e.id == entity.id)) return;
+      if (!seen.add(entity.id)) return;
       ordered.add(entity);
       final children = entity.getComponent<jge.ChildrenComponent>();
       if (children == null) return;
@@ -476,26 +663,12 @@ class DeleteEntitiesCommand extends EditorCommand {
       collect(entity);
     }
     for (final entity in ordered) {
-      _specs.add(EntitySpec.of(entity, codec));
+      _specs.add(EntitySpec.of(entity, codec, world: world));
       _ids.add(entity.id);
-      // By name and index, because ids are handed out again when the
-      // entities come back: what the file uses to say the same thing.
-      _slots.add(
-        _DeletedSlot(
-          parentName: _parentNameOf(entity, world),
-          index: HierarchySlot.of(
-            entity,
-            world: world,
-            sceneState: sceneState,
-          ).index,
-        ),
+      _places.add(
+        HierarchySlot.of(entity, world: world, sceneState: sceneState).index,
       );
     }
-  }
-
-  static String? _parentNameOf(jge.Entity entity, jge.World world) {
-    final parentId = entity.getComponent<jge.ParentComponent>()?.parentId;
-    return parentId == null ? null : world.getEntity(parentId)?.name;
   }
 
   @override
@@ -508,21 +681,29 @@ class DeleteEntitiesCommand extends EditorCommand {
   final EditorSceneState sceneState;
 
   final List<EntitySpec> _specs = [];
+
+  /// The ids the entities had when this was made; what they are now is
+  /// [EditorSceneState.currentId] of them.
   final List<jge.EntityId> _ids = [];
-  final List<_DeletedSlot> _slots = [];
+
+  /// Each one's place among its parent's children, or among the roots,
+  /// counted with all of them there.
+  final List<int> _places = [];
 
   @override
   void redo() {
+    final gone = <jge.EntityId>{};
     for (final id in _ids) {
-      final entity = world.getEntity(id);
+      final entity = world.getEntity(sceneState.currentId(id));
       if (entity == null) continue;
       detachEntity(entity, world: world, sceneState: sceneState);
-      sceneState.removeEntityNode(id);
+      gone.add(entity.id);
       // Each id in the list is removed on its own; its children are not
       // this command's to take.
       world.destroyEntity(entity, withChildren: false);
     }
     sceneState
+      ..removeEntityNodes(gone)
       ..clearSelection()
       ..markDirty()
       ..refresh();
@@ -530,37 +711,48 @@ class DeleteEntitiesCommand extends EditorCommand {
 
   @override
   void undo() {
-    final restored = <jge.Entity>[];
-    for (final spec in _specs) {
-      final components = spec.decode();
-      if (components.isEmpty) {
-        restored.add(jge.Entity(-1));
-        continue;
-      }
-      final entity = world.createEntityWithComponents(
-        components,
-        name: spec.name,
+    final restored = List<jge.Entity?>.filled(_specs.length, null);
+    // Parents first, each recorded as rebuilt before the next is made, so
+    // a child — or a part of a prefab instance — finds what it hangs from
+    // as it is now.
+    for (var i = 0; i < _specs.length; i++) {
+      final entity = _specs[i].build(
+        world,
+        prefabTop: (top) => world.getEntity(sceneState.currentId(top))?.id,
       );
-      sceneState.registerEntity(entity);
-      restored.add(entity);
+      if (entity == null) continue;
+      sceneState
+        ..registerEntity(entity)
+        ..entityRebuilt(sceneState.currentId(_ids[i]), entity);
+      restored[i] = entity;
     }
 
-    // Parents first, so a child is put back into a parent that exists.
-    // Ids are new, so the link is made from the names that were saved —
-    // the same thing a scene file records.
-    for (var i = 0; i < restored.length; i++) {
+    // Lowest place first: each place was counted with all of them there,
+    // so filling them in order puts every one back where it was. Taken in
+    // the order they were selected in, a later one landed before an
+    // earlier one and the order scrambled.
+    final order = [for (var i = 0; i < _specs.length; i++) i];
+    int key(int i) => _places[i] < 0 ? 1 << 30 : _places[i];
+    order.sort((a, b) {
+      final byPlace = key(a).compareTo(key(b));
+      return byPlace != 0 ? byPlace : a.compareTo(b);
+    });
+    for (final i in order) {
       final entity = restored[i];
-      if (entity.id < 0) continue;
-      final slot = _slots[i];
-      final parentName = slot.parentName;
-      final parent = parentName == null
-          ? null
-          : world.findEntityByName(parentName);
+      if (entity == null) continue;
+      final spec = _specs[i];
+      final parent = _parentOf(spec);
+      final hadParent = spec.parentId != null || spec.parentName != null;
       placeEntity(
         entity,
         world: world,
         sceneState: sceneState,
-        slot: HierarchySlot(parentId: parent?.id, index: slot.index),
+        slot: HierarchySlot(
+          parentId: parent?.id,
+          // A parent that is gone leaves it last among the roots: its
+          // place was counted among that parent's children.
+          index: parent == null && hadParent ? -1 : _places[i],
+        ),
       );
     }
 
@@ -568,14 +760,17 @@ class DeleteEntitiesCommand extends EditorCommand {
       ..markDirty()
       ..refresh();
   }
-}
 
-/// Where a deleted entity was, in terms that survive it being destroyed.
-class _DeletedSlot {
-  const _DeletedSlot({required this.parentName, required this.index});
-
-  final String? parentName;
-  final int index;
+  /// The parent [spec] was under, as it is now: by id — rebuilt by this
+  /// undo, or still there — and by name only when that is gone.
+  jge.Entity? _parentOf(EntitySpec spec) {
+    if (spec.parentId case final id?) {
+      final found = world.getEntity(sceneState.currentId(id));
+      if (found != null) return found;
+    }
+    if (spec.parentName case final name?) return world.findEntityByName(name);
+    return null;
+  }
 }
 
 /// Changes one field of one component, using the editor descriptor's own
@@ -584,6 +779,12 @@ class _DeletedSlot {
 /// Because every registered field already exposes a generic getter and setter,
 /// this single command gives undo to every field of every component in the
 /// inspector without a line of per-field work.
+///
+/// With an [entity], the component written is the one of [component]'s
+/// type that entity has when the command runs — not necessarily
+/// [component] itself. Stopping a play-test puts back every component as a fresh
+/// instance, and an undone delete rebuilds the whole entity; an edit made
+/// before either still reaches the component that is there now.
 class ComponentFieldCommand extends EditorCommand {
   ComponentFieldCommand({
     required this.label,
@@ -592,13 +793,20 @@ class ComponentFieldCommand extends EditorCommand {
     required this.before,
     required this.after,
     required this.sceneState,
+    required this.entity,
   });
 
   @override
   final String label;
 
-  /// The component being edited.
+  /// The component being edited, as it was when the edit was made.
   final jge.Component component;
+
+  /// The entity [component] belongs to: what the component to write is
+  /// looked up on, by type, each time the command runs. Null only for a
+  /// component that is on no entity (one edited in a file's own window);
+  /// every caller says which, so none forgets it.
+  final jge.Entity? entity;
 
   /// The descriptor field's setter.
   final void Function(jge.Component component, Object? value) write;
@@ -612,6 +820,17 @@ class ComponentFieldCommand extends EditorCommand {
   /// Notified so the canvas and panels refresh.
   final EditorSceneState sceneState;
 
+  /// The component to write now: [component]'s type on [entity] as it is
+  /// now, or [component] itself without an [entity]. Null when that entity
+  /// is gone or no longer has one.
+  jge.Component? get target {
+    final owner = entity;
+    if (owner == null) return component;
+    return sceneState
+        .liveEntity(owner)
+        ?.getComponentByType(component.componentType);
+  }
+
   @override
   void redo() => _apply(after);
 
@@ -619,7 +838,8 @@ class ComponentFieldCommand extends EditorCommand {
   void undo() => _apply(before);
 
   void _apply(Object? value) {
-    write(component, value);
+    final into = target;
+    if (into != null) write(into, value);
     sceneState
       ..markDirty()
       ..refresh();
@@ -628,24 +848,41 @@ class ComponentFieldCommand extends EditorCommand {
   /// Collapses consecutive edits to the same field.
   ///
   /// Scrubbing a number field emits a value per pixel of drag; without this,
-  /// nudging a width would fill the entire history.
+  /// nudging a width would fill the entire history. A new gesture stands on
+  /// its own: whoever starts one calls [EditorHistory.breakMerge] — the
+  /// inspector on every press inside a component's card.
   @override
   bool mergeWith(EditorCommand next) {
     if (next is! ComponentFieldCommand) return false;
-    if (!identical(next.component, component)) return false;
     if (next.label != label) return false;
+    final mine = entity, theirs = next.entity;
+    final same =
+        identical(next.component, component) ||
+        (mine != null &&
+            theirs != null &&
+            next.component.componentType == component.componentType &&
+            identical(
+              sceneState.liveEntity(theirs),
+              sceneState.liveEntity(mine),
+            ));
+    if (!same) return false;
     after = next.after;
     return true;
   }
 }
 
 /// Adds a component to an entity.
+///
+/// An entity holds one component per type (`Component.componentType`):
+/// adding one of a type it has already replaces that one — every 2-D shape
+/// is a `RenderableComponent`, say. The one replaced is kept, and undo puts
+/// it back, with its place among the others.
 class AddComponentCommand extends EditorCommand {
   AddComponentCommand({
     required this.entity,
     required this.component,
     required this.sceneState,
-  });
+  }) : _added = component;
 
   @override
   String get label => 'Add ${component.runtimeType}';
@@ -660,9 +897,23 @@ class AddComponentCommand extends EditorCommand {
   /// Notified so the inspector refreshes.
   final EditorSceneState sceneState;
 
+  /// What goes on at redo: [component] at first; then whatever of its type
+  /// the entity had when it was last undone — the same instance, or the
+  /// fresh one a Stop put in its place.
+  jge.Component _added;
+
+  /// What adding it replaced, and the entity's order before.
+  jge.Component? _replaced;
+  List<Type>? _order;
+
   @override
   void redo() {
-    entity.addComponent(component);
+    final live = sceneState.liveEntity(entity);
+    if (live == null) return;
+    final existing = live.getComponentByType(component.componentType);
+    _replaced = identical(existing, _added) ? null : existing;
+    _order = live.componentTypes;
+    live.addComponent(_added);
     sceneState
       ..markDirty()
       ..refresh();
@@ -670,7 +921,13 @@ class AddComponentCommand extends EditorCommand {
 
   @override
   void undo() {
-    entity.removeComponentByType(component.componentType);
+    final live = sceneState.liveEntity(entity);
+    if (live == null) return;
+    final type = component.componentType;
+    _added = live.getComponentByType(type) ?? _added;
+    live.removeComponentByType(type);
+    if (_replaced case final replaced?) live.addComponent(replaced);
+    if (_order case final order?) live.reorderComponents(order);
     sceneState
       ..markDirty()
       ..refresh();
@@ -683,7 +940,7 @@ class RemoveComponentCommand extends EditorCommand {
     required this.entity,
     required this.component,
     required this.sceneState,
-  });
+  }) : _removed = component;
 
   @override
   String get label => 'Remove ${component.runtimeType}';
@@ -698,14 +955,23 @@ class RemoveComponentCommand extends EditorCommand {
   /// Notified so the inspector refreshes.
   final EditorSceneState sceneState;
 
+  /// What undo puts back: the instance of [component]'s type the entity
+  /// had when it was removed — [component], or the one a Stop put in its
+  /// place.
+  jge.Component _removed;
+
   /// The entity's order before the removal, so undo puts the component
   /// back in its place rather than at the end.
   List<Type>? _order;
 
   @override
   void redo() {
-    _order = entity.componentTypes;
-    entity.removeComponentByType(component.componentType);
+    final live = sceneState.liveEntity(entity);
+    if (live == null) return;
+    final type = component.componentType;
+    _removed = live.getComponentByType(type) ?? _removed;
+    _order = live.componentTypes;
+    live.removeComponentByType(type);
     sceneState
       ..markDirty()
       ..refresh();
@@ -713,8 +979,10 @@ class RemoveComponentCommand extends EditorCommand {
 
   @override
   void undo() {
-    entity.addComponent(component);
-    if (_order case final order?) entity.reorderComponents(order);
+    final live = sceneState.liveEntity(entity);
+    if (live == null) return;
+    live.addComponent(_removed);
+    if (_order case final order?) live.reorderComponents(order);
     sceneState
       ..markDirty()
       ..refresh();
@@ -737,10 +1005,14 @@ class ReorderComponentsCommand extends EditorCommand {
   @override
   final String label;
 
+  /// The entity whose components are reordered; one rebuilt since is found
+  /// through [EditorSceneState.liveEntity].
   final jge.Entity entity;
 
-  /// The component types in order, as they were and as they are to be.
+  /// The component types in order, as they were.
   final List<Type> before;
+
+  /// The component types in the order they are to be.
   final List<Type> after;
 
   /// Notified so the inspector redraws.
@@ -753,7 +1025,7 @@ class ReorderComponentsCommand extends EditorCommand {
   void undo() => _apply(before);
 
   void _apply(List<Type> order) {
-    entity.reorderComponents(order);
+    sceneState.liveEntity(entity)?.reorderComponents(order);
     sceneState
       ..markDirty()
       ..refresh();
@@ -766,6 +1038,8 @@ class ReorderComponentsCommand extends EditorCommand {
 /// replaced component — while keeping each entity itself: capture
 /// [EntitySpec]s before, make the change, capture after, push this applied.
 class EntityStateCommand extends EditorCommand {
+  /// [ids], [before] and [after] must be the same length, one entry per
+  /// entity.
   EntityStateCommand({
     required this.label,
     required this.world,
@@ -831,10 +1105,10 @@ class EntityStateCommand extends EditorCommand {
 
   void _apply(List<EntitySpec> specs) {
     for (var i = 0; i < ids.length; i++) {
-      final entity = world.getEntity(ids[i]);
+      // As it is now: rebuilt since by an undone delete, it has a new id.
+      final entity = world.getEntity(sceneState.currentId(ids[i]));
       if (entity == null || !entity.isAlive) continue;
       specs[i].applyTo(entity);
-      sceneState.syncEntityNode(entity);
     }
     sceneState
       ..markDirty()

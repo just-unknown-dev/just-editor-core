@@ -5,7 +5,9 @@
 /// editor's own windows.
 ///
 /// The editor itself — `just_game_engine_editor` — hosts modules built on
-/// this.
+/// this. What only that host does — rebuilding a scope's registries and
+/// wiring it to its windows (`EditorScopeHost`), running the log's capture
+/// session (`EditorLogSession`) — is in `host.dart`.
 library;
 
 export 'src/designer/designer_canvas.dart';
@@ -29,6 +31,8 @@ export 'src/designer/working_plane.dart';
 export 'src/designer/tools/level_tool.dart';
 export 'src/designer/tools/path_tool.dart';
 export 'src/designer/tools/tool_registry.dart';
+export 'src/extension/asset_index.dart'
+    show AssetEntry, AssetIndex, TrashedAsset;
 export 'src/extension/asset_kind.dart';
 export 'src/extension/level_aids.dart';
 export 'src/extension/audio_drop.dart';
@@ -45,6 +49,8 @@ export 'src/inspector/add_component_picker.dart';
 export 'src/inspector/collection_editor.dart';
 export 'src/inspector/colour_picking.dart';
 export 'src/inspector/component_extras.dart';
+export 'src/inspector/component_reorder.dart'
+    show ComponentDrag, ComponentPlacement;
 export 'src/inspector/definition_section.dart';
 export 'src/inspector/edge_insets_row.dart';
 export 'src/inspector/field_editor.dart';
@@ -56,28 +62,14 @@ export 'src/look/editor_constants.dart'
 export 'src/look/editor_material_theme.dart';
 export 'src/look/editor_metrics.dart';
 export 'src/look/editor_theme_data.dart';
-export 'src/look/kit/buttons.dart';
-export 'src/look/kit/controls.dart';
-export 'src/look/kit/dialog_frame.dart' show EditorDialogFrame;
-export 'src/look/kit/dialogs.dart';
-export 'src/look/kit/fields.dart';
-export 'src/look/kit/focus.dart';
-export 'src/look/kit/key_claim.dart';
 export 'src/look/kit/kit.dart';
-export 'src/look/kit/layout.dart';
-export 'src/look/kit/look.dart';
-export 'src/look/kit/workspace.dart';
-export 'src/look/snackbar.dart';
 export 'src/look/theme_controller.dart';
-export 'src/look/widgets/editor_dropdown.dart';
-export 'src/look/widgets/editor_menu.dart';
-export 'src/look/widgets/editor_scrollbar.dart';
-export 'src/look/widgets/scrubbable_number_field.dart';
 export 'src/model/component_edit.dart';
 export 'src/model/component_registry.dart';
 export 'src/model/designer_command.dart';
 export 'src/model/editor_commands.dart';
 export 'src/model/editor_history.dart';
+export 'src/model/editor_keys.dart';
 export 'src/model/editor_scene.dart';
 export 'src/model/editor_scene_state.dart';
 export 'src/model/designer_3d_state.dart';
@@ -94,11 +86,16 @@ export 'src/project/project_tags.dart';
 export 'src/project/tag_references.dart';
 export 'src/scene_tree/scene_tree_model.dart';
 export 'src/scene_tree/scene_tree_row.dart';
-export 'src/scope/editor_scope.dart';
-export 'src/services/editor_log_service.dart';
+export 'src/scope/editor_scope.dart' hide EditorScopeHost;
+export 'src/services/editor_log_entry.dart';
+export 'src/services/editor_log_service.dart' hide EditorLogSession;
+export 'src/services/editor_log_storage.dart' show EditorLogStorage;
 export 'src/services/package_asset_paths.dart';
-export 'src/settings/chrome_state.dart' show EditorChromeState;
+export 'src/services/project_files.dart';
+export 'src/settings/chrome_state.dart'
+    show EditorChromeState, PerfHistorySample;
 export 'src/settings/editor_prefs.dart';
+export 'src/settings/overlay_settings_store.dart' show OverlaySettingsStore;
 export 'src/settings/gizmo_settings.dart';
 export 'src/settings/overlay_ui_settings.dart';
 export 'src/validation/scene_validator.dart';

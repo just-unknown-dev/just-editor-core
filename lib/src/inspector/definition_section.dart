@@ -16,14 +16,13 @@ import '../model/editor_commands.dart';
 import '../model/editor_history.dart';
 import 'component_extras.dart';
 import 'component_reorder.dart';
-import '../look/widgets/scrubbable_number_field.dart';
 import 'field_editor.dart';
 import 'field_rows.dart';
 import 'live_preview.dart';
 
 /// One inspector section per component on [entity], built from each
-/// component's definition. A component with no definition (and no legacy
-/// descriptor) is not shown: it cannot be saved either. The exception is
+/// component's definition. A component with no definition is not shown: it
+/// cannot be saved either. The exception is
 /// what the file named but nothing could read, which is shown — read-only —
 /// because it *is* saved.
 ///
@@ -125,7 +124,6 @@ List<Widget> buildComponentSections({
               ),
             ),
             onChanged: () {
-              sceneState.syncEntityNode(entity);
               sceneState.markDirty();
               // Before the refresh, so what is drawn is what was keyed.
               if (!ownDocument) {
@@ -145,6 +143,8 @@ List<Widget> buildComponentSections({
 class UnknownComponentsCard extends StatelessWidget {
   const UnknownComponentsCard({super.key, required this.component});
 
+  /// What the scene held that nothing could read; the card's title lists
+  /// its [UnknownComponents.types].
   final UnknownComponents component;
 
   @override
@@ -225,23 +225,49 @@ class DefinitionSection extends StatelessWidget {
   /// timeline's key button among them: only the scene's entities can be
   /// keyed.
   final bool showAccessories;
+
+  /// The component edited: its fields are read from it and written to it.
   final jge.Component component;
+
+  /// How [component] is described: its type id, its fields, and the hints
+  /// the card is drawn from.
   final jge.ComponentDefinition definition;
+
+  /// The editor the card belongs to: field editors, extras, accessories,
+  /// which cards and groups are folded, and the history and scene state
+  /// used when none are given.
   final EditorScope scope;
+
+  /// Removes the component: the header's × runs it, shown only when
+  /// [hints] say the component is deletable.
   final VoidCallback onDelete;
+
+  /// Called after a field edit has been recorded and after an
+  /// [InspectorAction] has run: what marks the document unsaved and
+  /// redraws it.
   final VoidCallback onChanged;
 
+  /// The definition's inspector hints: name, icon, accent, description,
+  /// field hints, groups and shared rows.
   jge.ComponentHints get hints => definition.hints;
+
+  /// What the editor adds to this type's card — header actions, a section
+  /// under the fields, field editors, a folded summary — or null for none.
   ComponentEditorExtras? get extras => scope.extras.forType(definition.type);
 
   @override
-  Widget build(BuildContext context) => SignalBuilder<Set<String>>(
-    signal: scope.chrome.collapsedComponents,
-    builder: (context, collapsed, _) => SignalBuilder<Set<String>>(
-      // Which groups are open: a fold redraws the card.
-      signal: scope.chrome.flippedGroups,
-      builder: (context, _, _) =>
-          _card(context, collapsed.contains(definition.type)),
+  Widget build(BuildContext context) => Listener(
+    // A press anywhere in the card starts a new edit: two separate changes
+    // of one field are two undo steps, while one drag stays one.
+    onPointerDown: (_) => (history ?? scope.history).breakMerge(),
+    child: SignalBuilder<Set<String>>(
+      signal: scope.chrome.collapsedComponents,
+      builder: (context, collapsed, _) => SignalBuilder<Set<String>>(
+        // Which groups are open: a fold redraws the card.
+        signal: scope.chrome.flippedGroups,
+        builder: (context, _, _) =>
+            _card(context, collapsed.contains(definition.type)),
+      ),
     ),
   );
 
@@ -611,7 +637,9 @@ class DefinitionSection extends StatelessWidget {
       preview: field.write == null
           ? null
           : LivePreview(
-              read: () => field.read(component),
+              // A copy, not the live object: what is put back when the
+              // preview ends must not be what the preview changed.
+              read: () => _detached(field, field.read(component)),
               write: (v) {
                 field.write!(component, v);
                 (sceneState ?? scope.sceneState).refresh();
@@ -622,17 +650,26 @@ class DefinitionSection extends StatelessWidget {
       onChanged: (next) {
         final write = field.write;
         if (write == null) return;
+        // Kept as saved, not as read: a field may read the component's own
+        // live object (a transform's scale vector), which the edit then
+        // changes in place — and an undo would put back the new value.
+        final before = _savedValue(field, field.read(component));
+        final after = _savedValue(field, next);
+        final asSaved = before.ok && after.ok;
         // Through the history, so an inspector edit is undoable like every
         // other edit. `ComponentFieldCommand` merges consecutive writes to
         // the same field, which is what makes a scrub one undo step
-        // instead of one per pixel.
+        // instead of one per pixel; a press in the card starts a new one.
         (history ?? scope.history).push(
           ComponentFieldCommand(
             label: 'Change ${hint.label ?? field.name}',
             component: component,
-            write: (c, v) => write(c, v),
-            before: field.read(component),
-            after: next,
+            entity: entity,
+            write: asSaved
+                ? (c, v) => field.decodeInto(c, v)
+                : (c, v) => write(c, v),
+            before: asSaved ? before.json : field.read(component),
+            after: asSaved ? after.json : next,
             // The state this section edits, not always the scene's: the
             // refresh on undo has to reach whoever shows it.
             sceneState: sceneState ?? scope.sceneState,
@@ -643,3 +680,37 @@ class DefinitionSection extends StatelessWidget {
     );
   }
 }
+
+/// [value] as [field] saves it, deep-copied — nothing in it is shared with
+/// the component it came from, or with whoever passed it — and whether
+/// that worked. An undo step keeps values this way and writes them back
+/// through the field's own decoding ([jge.SchemaField.decodeInto]), so it
+/// puts back exactly what was there, however the field reads and writes.
+({bool ok, Object? json}) _savedValue(jge.SchemaField field, Object? value) {
+  try {
+    return (ok: true, json: _deepCopy(field.kind.encodeAny(value)));
+  } catch (_) {
+    // A value of a shape the field cannot encode: kept as it is.
+    return (ok: false, json: null);
+  }
+}
+
+/// [value] as a fresh object of [field]'s kind, sharing nothing with
+/// where it came from; [value] itself when the field cannot encode it.
+Object? _detached(jge.SchemaField field, Object? value) {
+  final saved = _savedValue(field, value);
+  if (!saved.ok) return value;
+  try {
+    return field.kind.decodeAny(saved.json, field.constraints);
+  } catch (_) {
+    return value;
+  }
+}
+
+Object? _deepCopy(Object? value) => switch (value) {
+  final Map<dynamic, dynamic> map => {
+    for (final e in map.entries) e.key: _deepCopy(e.value),
+  },
+  final List<dynamic> list => [for (final v in list) _deepCopy(v)],
+  _ => value,
+};

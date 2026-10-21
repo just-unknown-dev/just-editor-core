@@ -25,10 +25,15 @@ class AddComponentPicker extends StatefulWidget {
     this.history,
   });
 
+  /// The entity a component is added to. Entries whose component type it
+  /// already holds cannot be picked: adding one would replace it.
   final Entity entity;
 
   /// What can be added: the scope's definitions.
   final EditorScope scope;
+
+  /// The state the [AddComponentCommand] marks unsaved and refreshes, on
+  /// add and on undo.
   final EditorSceneState sceneState;
 
   /// Where adding is recorded; the scene's history unless given.
@@ -84,8 +89,19 @@ class _AddComponentPickerState extends State<AddComponentPicker>
     }
   }
 
-  Set<String> get _existingTypes =>
-      widget.entity.components.map((c) => c.runtimeType.toString()).toSet();
+  /// What each entry's components are filed under — what the entity can
+  /// hold one of — by entry name, worked out once by making one.
+  final Map<String, Type> _types = {};
+
+  Type? _typeOf(ComponentEntry entry) {
+    final known = _types[entry.name];
+    if (known != null) return known;
+    try {
+      return _types[entry.name] = entry.factory().componentType;
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<ComponentEntry> get _filtered {
     final allEntries = getComponentRegistryEntries(widget.scope);
@@ -112,9 +128,14 @@ class _AddComponentPickerState extends State<AddComponentPicker>
     _toggle();
   }
 
-  bool _addable(ComponentEntry entry) =>
-      entry.allowMultiple ||
-      !_existingTypes.contains(entry.componentTypeName ?? entry.name);
+  /// Whether [entry] can be added without replacing something: an entity
+  /// holds one component per type, and several entries share one — every
+  /// 2-D shape is a `RenderableComponent` — so a Circle on an entity with
+  /// a Rectangle would replace it. Compared by type, not by class name.
+  bool _addable(ComponentEntry entry) {
+    final type = _typeOf(entry);
+    return type != null && !widget.entity.hasComponentByType(type);
+  }
 
   /// Enter in the search: the first match that can be added.
   void _addFirst() {
@@ -188,7 +209,7 @@ class _AddComponentPickerState extends State<AddComponentPicker>
             searchCtrl: _searchCtrl,
             searchFocus: _searchFocus,
             filtered: _filtered,
-            existingTypes: _existingTypes,
+            addable: _addable,
             onAdd: _addComponent,
             onSubmit: _addFirst,
             onEscape: _toggle,
@@ -206,7 +227,7 @@ class _PickerList extends StatelessWidget {
     required this.searchCtrl,
     required this.searchFocus,
     required this.filtered,
-    required this.existingTypes,
+    required this.addable,
     required this.onAdd,
     required this.onSubmit,
     required this.onEscape,
@@ -215,7 +236,9 @@ class _PickerList extends StatelessWidget {
   final TextEditingController searchCtrl;
   final FocusNode searchFocus;
   final List<ComponentEntry> filtered;
-  final Set<String> existingTypes;
+
+  /// Whether an entry can be added: the entity has nothing of its type.
+  final bool Function(ComponentEntry entry) addable;
   final void Function(ComponentEntry) onAdd;
 
   /// Enter: add the first match.
@@ -320,10 +343,9 @@ class _PickerList extends StatelessWidget {
       final localIndex = index - cursor;
       if (localIndex < entries.length) {
         final entry = entries[localIndex];
-        final typeKey = entry.componentTypeName ?? entry.name;
-        // A type that allows several copies is never "already added".
-        final alreadyAdded =
-            !entry.allowMultiple && existingTypes.contains(typeKey);
+        // By the type it is filed under: a Circle is "already added" on an
+        // entity with a Rectangle — both are its one RenderableComponent.
+        final alreadyAdded = !addable(entry);
         return _ComponentRow(
           entry: entry,
           alreadyAdded: alreadyAdded,

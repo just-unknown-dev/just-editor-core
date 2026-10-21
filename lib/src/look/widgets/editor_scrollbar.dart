@@ -23,7 +23,12 @@ class EditorScrollbar extends StatefulWidget {
     this.axis = Axis.vertical,
   });
 
+  /// Builds the scrollable, which must use the controller it is given so
+  /// the bar follows it.
   final ScrollableBuilder builder;
+
+  /// The scrollable's controller, when the owner needs it too; null makes
+  /// one here and disposes of it.
   final ScrollController? controller;
 
   /// Which way the scrollable scrolls.
@@ -80,57 +85,4 @@ class _EditorScrollbarState extends State<EditorScrollbar> {
       ),
     );
   }
-}
-
-/// Scroll bars on both edges of something that scrolls both ways: a
-/// vertical scrollable holding a horizontal one, as [builder] makes them.
-class EditorScrollbar2D extends StatefulWidget {
-  const EditorScrollbar2D({super.key, required this.builder});
-
-  /// Builds `SingleChildScrollView(controller: vertical, child:
-  /// SingleChildScrollView(controller: horizontal, scrollDirection:
-  /// Axis.horizontal, ...))`.
-  final Widget Function(
-    BuildContext context,
-    ScrollController vertical,
-    ScrollController horizontal,
-  )
-  builder;
-
-  @override
-  State<EditorScrollbar2D> createState() => _EditorScrollbar2DState();
-}
-
-class _EditorScrollbar2DState extends State<EditorScrollbar2D> {
-  final ScrollController _vertical = ScrollController();
-  final ScrollController _horizontal = ScrollController();
-
-  @override
-  void dispose() {
-    _vertical.dispose();
-    _horizontal.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ScrollbarTheme(
-    data: EditorScrollbar.theme,
-    child: Scrollbar(
-      controller: _vertical,
-      thumbVisibility: true,
-      notificationPredicate: (n) =>
-          n.depth == 0 && n.metrics.axis == Axis.vertical,
-      child: Scrollbar(
-        controller: _horizontal,
-        thumbVisibility: true,
-        // The horizontal scrollable sits inside the vertical one.
-        notificationPredicate: (n) =>
-            n.depth == 1 && n.metrics.axis == Axis.horizontal,
-        child: ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: widget.builder(context, _vertical, _horizontal),
-        ),
-      ),
-    ),
-  );
 }

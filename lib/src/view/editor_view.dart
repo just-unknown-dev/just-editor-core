@@ -33,8 +33,10 @@ abstract interface class EditorView {
   /// Pixels per world unit at the centre of the view.
   double get zoom;
 
-  /// The zoom range.
+  /// The smallest [zoom] the view allows (furthest out).
   double get minZoom;
+
+  /// The largest [zoom] the view allows (closest in).
   double get maxZoom;
 
   /// Whether the view looks straight at the world plane, as 2-D does.
@@ -90,6 +92,8 @@ abstract interface class CameraSyncingView implements EditorView {
 /// The 2-D editor view: the engine's main camera, driven directly while the
 /// editor authors (the brain is told not to).
 class GameCameraEditorView implements EditorView {
+  /// A view on the camera the given function returns, asked each time the
+  /// view is used, so it follows a camera replaced when a scene opens.
   GameCameraEditorView(this._cameraOf);
 
   /// A view on a camera that never changes — a test's, say.
@@ -111,7 +115,8 @@ class GameCameraEditorView implements EditorView {
   set position(Offset value) => camera.position = value;
 
   @override
-  jge.Vector3 get focus => jge.Vector3(camera.position.dx, camera.position.dy, 0);
+  jge.Vector3 get focus =>
+      jge.Vector3(camera.position.dx, camera.position.dy, 0);
 
   @override
   jge.Vector3 screenToGround(Offset screen) {

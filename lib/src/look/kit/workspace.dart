@@ -1,11 +1,12 @@
 /// What every workspace is framed with — the sprite editor, the tileset
 /// editor, the interface editor — so they read as one editor's windows
-/// rather than four programs that happen to open from it.
+/// rather than separate programs that happen to open from it.
 library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../model/editor_keys.dart';
 import '../editor_constants.dart';
 import '../editor_metrics.dart';
 import 'buttons.dart';
@@ -35,6 +36,7 @@ class WorkspaceHeader extends StatelessWidget {
     this.closeTooltip = 'Close',
   });
 
+  /// The workspace's icon, in the accent before [title].
   final IconData icon;
 
   /// What the workspace is: "Interface", "Sprite Studio".
@@ -49,12 +51,19 @@ class WorkspaceHeader extends StatelessWidget {
   /// Null hides Save.
   final VoidCallback? onSave;
 
-  /// Null greys the button out: there is nothing to undo, or to redo.
+  /// Called by the Undo button. Null greys the button out: there is
+  /// nothing to undo.
   final VoidCallback? onUndo;
+
+  /// Called by the Redo button. Null greys the button out: there is
+  /// nothing to redo.
   final VoidCallback? onRedo;
 
-  /// What Undo and Redo would do, for their tooltips.
+  /// What Undo would undo, for its tooltip: `Move tile` reads
+  /// `Undo Move tile`.
   final String? undoLabel;
+
+  /// What Redo would redo, for its tooltip.
   final String? redoLabel;
 
   /// False for a workspace with no undo: no Undo and Redo at all, rather
@@ -67,11 +76,18 @@ class WorkspaceHeader extends StatelessWidget {
   /// Buttons before full screen and close.
   final List<Widget> trailing;
 
+  /// Whether the workspace fills the editor rather than sitting in its
+  /// dialog, for the full-screen button's look. The button shows only when
+  /// this and [onToggleFullScreen] are both set.
   final ValueListenable<bool>? fullScreen;
+
+  /// Switches between filling the editor and the dialog.
   final VoidCallback? onToggleFullScreen;
 
   /// Null hides Close.
   final VoidCallback? onClose;
+
+  /// Close's tooltip: `Close` by default.
   final String closeTooltip;
 
   /// The header's height, for anything laid out against it.
@@ -137,7 +153,7 @@ class WorkspaceHeader extends StatelessWidget {
                   EditorIconButton(
                     icon: Icons.save_outlined,
                     tooltip: dirty ? 'Save' : 'Save — nothing has changed',
-                    shortcut: 'Ctrl+S',
+                    shortcut: EditorKeys.withPrimary('S'),
                     isActive: dirty,
                     onTap: onSave,
                   ),
@@ -145,13 +161,13 @@ class WorkspaceHeader extends StatelessWidget {
                   EditorIconButton(
                     icon: Icons.undo_rounded,
                     tooltip: undoLabel == null ? 'Undo' : 'Undo $undoLabel',
-                    shortcut: 'Ctrl+Z',
+                    shortcut: EditorKeys.withPrimary('Z'),
                     onTap: onUndo,
                   ),
                   EditorIconButton(
                     icon: Icons.redo_rounded,
                     tooltip: redoLabel == null ? 'Redo' : 'Redo $redoLabel',
-                    shortcut: 'Ctrl+Y',
+                    shortcut: EditorKeys.withPrimary('Y'),
                     onTap: onRedo,
                   ),
                 ],
@@ -172,7 +188,7 @@ class WorkspaceHeader extends StatelessWidget {
             ),
           ),
           ...trailing,
-          ?WorkspaceFullScreenButton.maybe(
+          ?_WorkspaceFullScreenButton.maybe(
             fullScreen: fullScreen,
             onToggle: onToggleFullScreen,
           ),
@@ -201,9 +217,8 @@ class _HeaderDivider extends StatelessWidget {
 }
 
 /// Fills the editor with a workspace, or puts it back in its dialog.
-class WorkspaceFullScreenButton extends StatelessWidget {
-  const WorkspaceFullScreenButton({
-    super.key,
+class _WorkspaceFullScreenButton extends StatelessWidget {
+  const _WorkspaceFullScreenButton({
     required this.fullScreen,
     required this.onToggle,
   });
@@ -214,7 +229,7 @@ class WorkspaceFullScreenButton extends StatelessWidget {
     required VoidCallback? onToggle,
   }) => fullScreen == null || onToggle == null
       ? null
-      : WorkspaceFullScreenButton(fullScreen: fullScreen, onToggle: onToggle);
+      : _WorkspaceFullScreenButton(fullScreen: fullScreen, onToggle: onToggle);
 
   final ValueListenable<bool> fullScreen;
   final VoidCallback onToggle;
@@ -246,8 +261,15 @@ class WorkspaceKeyScope extends StatefulWidget {
     this.autofocus = true,
   });
 
+  /// Handles a key the workspace sees while nothing is being typed; return
+  /// [KeyEventResult.handled] for a key it used, so it goes no further.
   final KeyEventResult Function(KeyEvent event) onKey;
+
+  /// The workspace.
   final Widget child;
+
+  /// Whether the scope takes the keyboard as soon as it shows, so the
+  /// first key pressed reaches [onKey]. On by default.
   final bool autofocus;
 
   /// Whether the keyboard is in a text field right now.
@@ -288,7 +310,23 @@ class _WorkspaceKeyScopeState extends State<WorkspaceKeyScope> {
     onPointerDown: (_) {
       // A field takes the focus itself on this same press; anything else
       // hands it back to the workspace.
-      if (!WorkspaceKeyScope.isTyping) _node.requestFocus();
+      if (!WorkspaceKeyScope.isTyping) {
+        _node.requestFocus();
+        return;
+      }
+      // Pressed while typing: the field lets go of the keyboard only after
+      // this — its tap-outside comes later in the same press — and hands
+      // it to the scope around it, which a key never reaches the
+      // workspace from. Once it has let go, the workspace takes it back,
+      // unless the press went to another field or something that keeps
+      // the focus for itself.
+      WidgetsBinding.instance
+        ..addPostFrameCallback((_) {
+          if (!mounted || WorkspaceKeyScope.isTyping) return;
+          final focus = FocusManager.instance.primaryFocus;
+          if (focus == null || focus is FocusScopeNode) _node.requestFocus();
+        })
+        ..ensureVisualUpdate();
     },
     child: Focus(
       focusNode: _node,

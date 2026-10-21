@@ -12,6 +12,7 @@ import 'buttons.dart';
 class EditorToolbar extends StatelessWidget {
   const EditorToolbar({super.key, required this.children, this.border = true});
 
+  /// The controls, left to right, laid out in a [Row].
   final List<Widget> children;
 
   /// The line along its foot.
@@ -52,10 +53,13 @@ class EditorSectionHeader extends StatelessWidget {
     this.padding = const EdgeInsets.fromLTRB(12, 12, 12, 4),
   });
 
+  /// The caption, shown in capitals whatever case it is given in.
   final String label;
 
   /// Something at the right end: a count, an Add button.
   final Widget? trailing;
+
+  /// Space around the header; 12 at the sides and top, 4 below by default.
   final EdgeInsetsGeometry padding;
 
   @override
@@ -93,8 +97,13 @@ class EditorCard extends StatelessWidget {
     this.margin = EdgeInsets.zero,
   });
 
+  /// What the card holds.
   final Widget child;
+
+  /// Space inside the card, around [child]; 12 on every side by default.
   final EdgeInsetsGeometry padding;
+
+  /// Space outside the card; none by default.
   final EdgeInsetsGeometry margin;
 
   @override
@@ -114,6 +123,8 @@ class EditorCard extends StatelessWidget {
 class EditorDivider extends StatelessWidget {
   const EditorDivider({super.key, this.vertical = false});
 
+  /// Whether the line runs up and down (1 px wide, as tall as it is let
+  /// be) rather than across (1 px tall). Off by default.
   final bool vertical;
 
   @override
@@ -136,14 +147,25 @@ class EditorEmptyState extends StatelessWidget {
     this.onAction,
   });
 
+  /// A small muted icon over the title.
   final IconData icon;
+
+  /// What there is not, in a line: "Nothing selected".
   final String title;
+
+  /// A quieter line under the title — how to get something to show; none
+  /// when null.
   final String? hint;
 
   /// The one thing to do from here — "Add a Timeline Player". Shown only
   /// with [onAction].
   final String? actionLabel;
+
+  /// The action button's icon; a plus when null.
   final IconData? actionIcon;
+
+  /// Called when the action button is pressed; the button shows only when
+  /// this and [actionLabel] are both set.
   final VoidCallback? onAction;
 
   @override

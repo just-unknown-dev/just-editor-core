@@ -15,4 +15,6 @@ class _StubEditorLogStorage implements EditorLogStorage {
   Future<List<EditorLogEntry>> loadEntries() async => const <EditorLogEntry>[];
 }
 
+/// The storage behind [createEditorLogStorage] without `dart:io` (the
+/// web): it keeps nothing and has no file.
 EditorLogStorage createEditorLogStorageImpl() => _StubEditorLogStorage();

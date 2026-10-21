@@ -47,13 +47,16 @@ final class EditorMarker {
   );
 
   /// Spawn points, labelled with their spawner.
-  static final EditorMarker spawnPoints = EditorMarker(
+  static const EditorMarker spawnPoints = EditorMarker(
     id: 'spawn',
-    components: const [jge.SpawnComponent],
+    components: [jge.SpawnComponent],
     icon: Icons.person_pin_circle_rounded,
-    color: const Color(0xFFFFB74D),
-    label: (e) => e.getComponent<jge.SpawnComponent>()?.spawner,
+    color: Color(0xFFFFB74D),
+    label: _spawner,
   );
+
+  static String? _spawner(jge.Entity e) =>
+      e.getComponent<jge.SpawnComponent>()?.spawner;
 
   /// The editor's own.
   static List<EditorMarker> get builtIn => [cameras, spawnPoints];

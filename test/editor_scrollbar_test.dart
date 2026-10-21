@@ -49,27 +49,4 @@ void main() {
     expect(find.byWidgetPredicate((w) => w is RawScrollbar), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
   });
-
-  testWidgets('something scrolling both ways has a bar on each edge', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _host(
-        EditorScrollbar2D(
-          builder: (_, vertical, horizontal) => SingleChildScrollView(
-            controller: vertical,
-            child: SingleChildScrollView(
-              controller: horizontal,
-              scrollDirection: Axis.horizontal,
-              child: const SizedBox(width: 800, height: 800),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    final bars = tester.widgetList<Scrollbar>(find.byType(Scrollbar)).toList();
-    expect(bars, hasLength(2));
-    expect(bars.every((b) => b.thumbVisibility == true), isTrue);
-  });
 }

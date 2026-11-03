@@ -102,6 +102,9 @@ class EditorScope {
        _world = world,
        container = DiContainer(parent: parent),
        _isDebug = isDebug ?? kDebugMode {
+    // The editor reads and writes the engine's scenes: it knows the
+    // engine's own components, whatever context it was given.
+    (engine?.context ?? world!.context).install(BuiltInComponents.extension);
     final defs = (engine?.context ?? world!.context).definitions;
     // The editor's own store, opened once and shared by everything that
     // keeps something in it: two stores on one file drop each other's

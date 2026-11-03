@@ -134,7 +134,7 @@ abstract final class DesignerGeometry {
   /// The engine's own definitions, for components in no world. Never
   /// registered into; made when asked, so a hot reload's are the ones used.
   static jge.ComponentDefinitionRegistry get _core =>
-      jge.ComponentDefinitionRegistry.core();
+      jge.BuiltInComponents.registry();
 
   /// The unscaled size implied by [entity]'s components, largest wins.
   ///

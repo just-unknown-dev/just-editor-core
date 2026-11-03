@@ -18,7 +18,7 @@ void main() {
   late SceneCodec codec;
 
   setUp(() {
-    world = World()..initialize();
+    world = World(extensions: [BuiltInComponents.extension])..initialize();
     state = EditorSceneState()..openScene(EditorScene(name: 'test'));
     history = EditorHistory();
     codec = SceneCodec(world.context.definitions);

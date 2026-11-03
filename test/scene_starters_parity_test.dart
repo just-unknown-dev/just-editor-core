@@ -14,7 +14,7 @@ import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_editor_core/host.dart';
 
 void main() {
-  final codec = SceneCodec(ComponentDefinitionRegistry.core());
+  final codec = SceneCodec(BuiltInComponents.registry());
   List<Map<String, dynamic>> encode(List<Component> components) =>
       components.map(codec.encode).whereType<Map<String, dynamic>>().toList();
   Map<String, dynamic> entity(String name, List<Component> components) => {

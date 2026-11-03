@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An `EditorScope` installs the engine's built-in components (`BuiltInComponents.extension`) into its context, so it reads and writes scenes whatever world it was given.
 - `UnknownComponents` is `UnknownTypesComponent` (file `unknown_types_component.dart`), as every component's name now ends in `Component`.
 
 ## 0.1.0-dev.1

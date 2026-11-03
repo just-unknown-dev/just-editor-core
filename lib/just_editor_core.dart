@@ -79,7 +79,7 @@ export 'src/model/modifier_keys.dart';
 export 'src/model/scene_codec.dart';
 export 'src/model/scene_store.dart';
 export 'src/model/transform_mode.dart';
-export 'src/model/unknown_components.dart';
+export 'src/model/unknown_types_component.dart';
 export 'src/project/project_colours.dart';
 export 'src/project/project_physics_layers.dart';
 export 'src/project/project_tags.dart';

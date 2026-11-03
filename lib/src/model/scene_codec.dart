@@ -1,7 +1,7 @@
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'editor_commands.dart' show TransformSnapshot;
-import 'unknown_components.dart';
+import 'unknown_types_component.dart';
 
 /// Encodes and decodes components for one editor, through the engine's
 /// definition registry.
@@ -11,7 +11,7 @@ import 'unknown_components.dart';
 /// definition is not saved — the save path warns instead of silently writing
 /// something the game would then refuse to load. A *saved* component with no
 /// definition is the other way round: it came from the file, so it is kept
-/// ([UnknownComponents]) and written back as it was.
+/// ([UnknownTypesComponent]) and written back as it was.
 class SceneCodec {
   const SceneCodec(this.definitions, {this.prefabs});
 
@@ -32,12 +32,12 @@ class SceneCodec {
 
   /// Whether [component] would be saved.
   bool canEncode(Component component) =>
-      component is UnknownComponents || definitions.canEncode(component);
+      component is UnknownTypesComponent || definitions.canEncode(component);
 
   /// Decodes an entity's saved components, in order.
   ///
   /// What no definition can read is not dropped: it is gathered, verbatim,
-  /// into one [UnknownComponents] so that [encodeAll] writes it back.
+  /// into one [UnknownTypesComponent] so that [encodeAll] writes it back.
   List<Component> decodeAll(Iterable<dynamic> json) {
     final out = <Component>[];
     final unknown = <Map<String, dynamic>>[];
@@ -51,16 +51,16 @@ class SceneCodec {
         unknown.add(map);
       }
     }
-    if (unknown.isNotEmpty) out.add(UnknownComponents(unknown));
+    if (unknown.isNotEmpty) out.add(UnknownTypesComponent(unknown));
     return out;
   }
 
   /// Encodes [components] as a scene file stores them: the ones with a
-  /// definition through it, the [UnknownComponents] exactly as they were
+  /// definition through it, the [UnknownTypesComponent] exactly as they were
   /// read, and runtime-only state not at all.
   List<Map<String, dynamic>> encodeAll(Iterable<Component> components) => [
     for (final c in components)
-      if (c is UnknownComponents)
+      if (c is UnknownTypesComponent)
         for (final entry in c.entries) Map<String, dynamic>.of(entry)
       else
         ?encode(c),
@@ -150,7 +150,7 @@ class SceneCodec {
     final homeIds = {for (final top in homes.keys) top.id};
     final out = [
       for (var i = 0; i < ordered.length; i++)
-        switch (ordered[i].getComponent<PrefabLink>()) {
+        switch (ordered[i].getComponent<PrefabLinkComponent>()) {
           final link?
               when homeIds.contains(link.instance) &&
                   link.instance != ordered[i].id =>
@@ -171,8 +171,8 @@ class SceneCodec {
     List<Map<String, dynamic>> encoded,
   ) {
     final index = {for (var i = 0; i < ordered.length; i++) ordered[i].id: i};
-    PrefabLink? linkOf(Entity? e) {
-      final link = e?.getComponent<PrefabLink>();
+    PrefabLinkComponent? linkOf(Entity? e) {
+      final link = e?.getComponent<PrefabLinkComponent>();
       if (link == null) return null;
       final top = index[link.instance];
       if (top == null ||

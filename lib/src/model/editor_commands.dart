@@ -331,7 +331,7 @@ class CreateEntitiesCommand extends EditorCommand {
 }
 
 /// What a prefab instance records on an entity it made, which no codec
-/// saves: its link (`PrefabLink`) — the instance's top entity and where in
+/// saves: its link (`PrefabLinkComponent`) — the instance's top entity and where in
 /// the prefab this one is — and, on the top, the instance as loaded
 /// (`PrefabInstanceComponent`).
 ///
@@ -346,7 +346,7 @@ class PrefabOrigin {
 
   /// What [entity] carries, or null for an entity no prefab made.
   static PrefabOrigin? of(jge.Entity entity) {
-    final link = entity.getComponent<jge.PrefabLink>();
+    final link = entity.getComponent<jge.PrefabLinkComponent>();
     final instance = entity.getComponent<jge.PrefabInstanceComponent>();
     if (link == null && instance == null) return null;
     return PrefabOrigin(
@@ -373,7 +373,8 @@ class PrefabOrigin {
   /// link naming [top] — the instance's top as it is now. A null [top]
   /// leaves the link off: the entity is no longer part of an instance.
   List<jge.Component> components(jge.EntityId? top) => [
-    if (top != null && path != null) jge.PrefabLink(instance: top, path: path!),
+    if (top != null && path != null)
+      jge.PrefabLinkComponent(instance: top, path: path!),
     if (block case final b?)
       jge.PrefabInstanceComponent(block: b, missing: missing),
   ];
@@ -459,7 +460,7 @@ class EntitySpec {
   final SceneCodec codec;
 
   /// Decodes the components. Anything with no definition is kept as it
-  /// was saved (`UnknownComponents`), exactly as a scene load does.
+  /// was saved (`UnknownTypesComponent`), exactly as a scene load does.
   List<jge.Component> decode() => codec.decodeAll(componentsJson);
 
   /// Makes the entity this describes in [world]: its components, its name,

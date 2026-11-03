@@ -11,8 +11,8 @@ import 'package:just_game_engine/just_game_engine.dart';
 ///
 /// One per entity, because an entity keeps one component per type and every
 /// unknown one would otherwise land on the same key.
-class UnknownComponents extends Component {
-  UnknownComponents(Iterable<Map<String, dynamic>> entries)
+class UnknownTypesComponent extends Component {
+  UnknownTypesComponent(Iterable<Map<String, dynamic>> entries)
     : entries = List.unmodifiable(entries);
 
   /// The saved components, each as its file stored it.
@@ -24,5 +24,5 @@ class UnknownComponents extends Component {
   ];
 
   @override
-  String toString() => 'UnknownComponents(${types.join(', ')})';
+  String toString() => 'UnknownTypesComponent(${types.join(', ')})';
 }

@@ -162,13 +162,13 @@ void main() {
       final top = make('Door');
       final part = make('Frame', under: top);
       top
-        ..addComponent(PrefabLink(instance: top.id, path: 'd1'))
+        ..addComponent(PrefabLinkComponent(instance: top.id, path: 'd1'))
         ..addComponent(
           PrefabInstanceComponent(
             block: PrefabInstance(path: 'prefabs/door.prefab.json'),
           ),
         );
-      part.addComponent(PrefabLink(instance: top.id, path: 'f1'));
+      part.addComponent(PrefabLinkComponent(instance: top.id, path: 'f1'));
 
       delete([top]);
       history.undo();
@@ -178,13 +178,13 @@ void main() {
         door.getComponent<PrefabInstanceComponent>()?.path,
         'prefabs/door.prefab.json',
       );
-      expect(door.getComponent<PrefabLink>()?.instance, door.id);
+      expect(door.getComponent<PrefabLinkComponent>()?.instance, door.id);
       expect(
-        frame.getComponent<PrefabLink>()?.instance,
+        frame.getComponent<PrefabLinkComponent>()?.instance,
         door.id,
         reason: 'linked to the rebuilt top, not the destroyed one',
       );
-      expect(frame.getComponent<PrefabLink>()?.path, 'f1');
+      expect(frame.getComponent<PrefabLinkComponent>()?.path, 'f1');
 
       final ordered = SceneCodec.inTreeOrder([door, frame]);
       final records = codec.encodeInOrder(ordered);
@@ -318,7 +318,7 @@ void main() {
     test('of a type the entity has puts the old one back on undo', () {
       final e = world.createEntityWithComponents([
         TransformComponent(),
-        RectangleComponent(width: 64, height: 16),
+        Rectangle2DComponent(width: 64, height: 16),
         HealthComponent(maxHealth: 1),
       ], name: 'Platform');
       state.registerEntity(e);
@@ -327,16 +327,19 @@ void main() {
       history.push(
         AddComponentCommand(
           entity: e,
-          component: CircleComponent(radius: 8),
+          component: Circle2DComponent(radius: 8),
           sceneState: state,
         ),
       );
-      expect(e.getComponentByType(RenderableComponent), isA<CircleComponent>());
+      expect(
+        e.getComponentByType(RenderableComponent),
+        isA<Circle2DComponent>(),
+      );
 
       history.undo();
       final shape = e.getComponentByType(RenderableComponent);
-      expect(shape, isA<RectangleComponent>());
-      expect((shape! as RectangleComponent).width, 64);
+      expect(shape, isA<Rectangle2DComponent>());
+      expect((shape! as Rectangle2DComponent).width, 64);
       expect(e.componentTypes, order);
     });
   });
@@ -431,7 +434,7 @@ void main() {
     Entity instance(String name, String path, double x) {
       final top = make(name, x: x);
       top
-        ..addComponent(PrefabLink(instance: top.id, path: 'r'))
+        ..addComponent(PrefabLinkComponent(instance: top.id, path: 'r'))
         ..addComponent(
           PrefabInstanceComponent(block: PrefabInstance(path: path)),
         );

@@ -9,7 +9,7 @@ import '../look/editor_metrics.dart';
 import '../look/kit/kit.dart';
 import 'package:just_signals/just_signals.dart';
 import '../scope/editor_scope.dart';
-import '../model/unknown_components.dart';
+import '../model/unknown_types_component.dart';
 import '../model/editor_scene_state.dart';
 import '../extension/editor_contributions.dart';
 import '../model/editor_commands.dart';
@@ -62,7 +62,7 @@ List<Widget> buildComponentSections({
   final shown = [
     for (final c in ordered)
       if (!hidden.contains(c.runtimeType) &&
-          c is! UnknownComponents &&
+          c is! UnknownTypesComponent &&
           !isPinnedComponent(c.componentType) &&
           titles.containsKey(c.componentType))
         c.componentType,
@@ -85,7 +85,7 @@ List<Widget> buildComponentSections({
     for (final component in ordered)
       if (hidden.contains(component.runtimeType))
         const SizedBox.shrink()
-      else if (component is UnknownComponents)
+      else if (component is UnknownTypesComponent)
         UnknownComponentsCard(component: component)
       else if (scope.definitionForInspector(component) case final definition?)
         // Keyed by type, so a card that moves keeps its own fields' state.
@@ -144,8 +144,8 @@ class UnknownComponentsCard extends StatelessWidget {
   const UnknownComponentsCard({super.key, required this.component});
 
   /// What the scene held that nothing could read; the card's title lists
-  /// its [UnknownComponents.types].
-  final UnknownComponents component;
+  /// its [UnknownTypesComponent.types].
+  final UnknownTypesComponent component;
 
   @override
   Widget build(BuildContext context) => EditorCard(

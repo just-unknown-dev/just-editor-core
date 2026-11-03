@@ -193,13 +193,15 @@ void main() {
       final tagged = node('Enemy', tag: 'enemy');
       world.createEntityWithComponents([
         TransformComponent(),
-        RectangleComponent(width: 8, height: 8),
+        Rectangle2DComponent(width: 8, height: 8),
       ], name: 'Drawn');
 
       expect(names(build(filter: const TreeFilter(tag: 'enemy'))), ['Enemy']);
       expect(
         names(
-          build(filter: const TreeFilter(componentType: 'RectangleComponent')),
+          build(
+            filter: const TreeFilter(componentType: 'Rectangle2DComponent'),
+          ),
         ),
         ['Drawn'],
       );

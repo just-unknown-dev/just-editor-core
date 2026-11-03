@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `UnknownComponents` is `UnknownTypesComponent` (file `unknown_types_component.dart`), as every component's name now ends in `Component`.
+
 ## 0.1.0-dev.1
 
 First release: what a `just_game_engine_editor` module builds on — a kit, a tool or a game's own editor module depends on this package, not on the editor. Needs `just_game_engine` ^2.0.0-dev.2, Flutter 3.47.1 and Dart 3.11; compiles on every Flutter platform, web and wasm included.

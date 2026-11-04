@@ -37,7 +37,7 @@ abstract final class AudioDrop {
   }) => jge.AudioSourceComponent(
     clipPath: path,
     loop: true,
-    is3d: spatial,
+    is3D: spatial,
     minDistance: in3d ? 1 : 64,
     maxDistance: in3d ? 20 : 1024,
     dopplerLevel: spatial && in3d ? 1 : 0,

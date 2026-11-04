@@ -29,7 +29,7 @@ void main() {
   });
 
   test('a 2-D scene shows a vector\'s x and y; a 3-D one all three', () {
-    const field = SchemaField(
+    const field = FieldDefinition(
       name: 'scale',
       kind: FieldTypes.vector3,
       read: _none,

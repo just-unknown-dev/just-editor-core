@@ -51,7 +51,7 @@ ComponentDefinition<CoinComponent> get coinDefinition => ComponentDefinition(
   type: 'CoinComponent',
   create: CoinComponent.new,
   fields: [
-    SchemaField(
+    FieldDefinition(
       name: 'value',
       kind: const CoinValueFieldType(),
       read: (c) => (c as CoinComponent).value,

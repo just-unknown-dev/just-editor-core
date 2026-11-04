@@ -11,7 +11,7 @@ import 'package:just_game_engine/just_game_engine.dart' as jge;
 /// speak rays ([screenToRay], [projectToScreen], [screenToGround]) work in
 /// both.
 ///
-/// The 2-D members are named as `jge.Camera`'s, so code written against the
+/// The 2-D members are named as `jge.OutputCamera`'s, so code written against the
 /// camera reads the same against a view.
 abstract interface class EditorView {
   /// The viewport's size in pixels.
@@ -97,12 +97,12 @@ class GameCameraEditorView implements EditorView {
   GameCameraEditorView(this._cameraOf);
 
   /// A view on a camera that never changes — a test's, say.
-  GameCameraEditorView.of(jge.Camera camera) : _cameraOf = (() => camera);
+  GameCameraEditorView.of(jge.OutputCamera camera) : _cameraOf = (() => camera);
 
-  final jge.Camera Function() _cameraOf;
+  final jge.OutputCamera Function() _cameraOf;
 
   /// The camera underneath.
-  jge.Camera get camera => _cameraOf();
+  jge.OutputCamera get camera => _cameraOf();
 
   @override
   Size get viewportSize => camera.viewportSize;
@@ -159,7 +159,7 @@ class GameCameraEditorView implements EditorView {
       camera.applyTransform(canvas, size);
 
   @override
-  Rect get visibleWorldRect => camera.getVisibleBounds();
+  Rect get visibleWorldRect => camera.visibleBounds;
 
   @override
   void setPosition(Offset world) => camera.setPosition(world);

@@ -397,7 +397,7 @@ class DefinitionSection extends StatelessWidget {
     );
   }
 
-  bool _shown(jge.SchemaField f) {
+  bool _shown(jge.FieldDefinition f) {
     final hint = hints.fields[f.name];
     if (hint == null) return true;
     final mode = sceneState?.editingMode ?? jge.SceneMode.twoD;
@@ -491,7 +491,7 @@ class DefinitionSection extends StatelessWidget {
 
   /// One row per field — except fields a [jge.FieldRowHint] gathers, which
   /// share the row where the first of them would be.
-  List<Widget> _rows(List<jge.SchemaField> fields) {
+  List<Widget> _rows(List<jge.FieldDefinition> fields) {
     final out = <Widget>[];
     final done = <String>{};
     for (final field in fields) {
@@ -525,7 +525,7 @@ class DefinitionSection extends StatelessWidget {
   /// [row] with what the modules' [FieldAccessory]s put after it for
   /// [fields] — the timeline's key button, while a timeline is open that
   /// could animate them on this entity.
-  Widget _withAccessories(Widget row, List<jge.SchemaField> fields) {
+  Widget _withAccessories(Widget row, List<jge.FieldDefinition> fields) {
     final owner = entity;
     if (owner == null || !showAccessories) return row;
     final context = FieldAccessoryContext(
@@ -548,16 +548,16 @@ class DefinitionSection extends StatelessWidget {
     );
   }
 
-  bool _isNumber(jge.SchemaField f) =>
+  bool _isNumber(jge.FieldDefinition f) =>
       f.kind.id == jge.FieldTypes.decimal.id ||
       f.kind.id == jge.FieldTypes.integer.id;
 
   /// The row hint [field] belongs to and the fields of it that are here,
   /// in the hint's order; `(null, [field])` when it stands alone. A field
   /// with an editor of its own is never gathered.
-  (jge.FieldRowHint?, List<jge.SchemaField>) _rowMates(
-    jge.SchemaField field,
-    List<jge.SchemaField> among,
+  (jge.FieldRowHint?, List<jge.FieldDefinition>) _rowMates(
+    jge.FieldDefinition field,
+    List<jge.FieldDefinition> among,
   ) {
     for (final row in hints.fieldRows) {
       if (!row.cells.containsKey(field.name)) continue;
@@ -574,7 +574,7 @@ class DefinitionSection extends StatelessWidget {
     return (null, [field]);
   }
 
-  Widget _sharedRow(jge.FieldRowHint row, List<jge.SchemaField> fields) {
+  Widget _sharedRow(jge.FieldRowHint row, List<jge.FieldDefinition> fields) {
     final contexts = [for (final f in fields) _context(f)];
     double shown(FieldEditorContext c) {
       final raw = (c.value as num?)?.toDouble() ?? 0.0;
@@ -612,13 +612,13 @@ class DefinitionSection extends StatelessWidget {
     );
   }
 
-  Widget _row(jge.SchemaField field) {
+  Widget _row(jge.FieldDefinition field) {
     final ctx = _context(field);
     final custom = extras?.fieldEditors[field.name];
     return custom != null ? custom(ctx) : scope.fieldEditors.build(ctx);
   }
 
-  FieldEditorContext _context(jge.SchemaField field) {
+  FieldEditorContext _context(jge.FieldDefinition field) {
     final hint = hints.fields[field.name] ?? const jge.FieldHint();
     return FieldEditorContext(
       field: field,
@@ -684,9 +684,12 @@ class DefinitionSection extends StatelessWidget {
 /// [value] as [field] saves it, deep-copied — nothing in it is shared with
 /// the component it came from, or with whoever passed it — and whether
 /// that worked. An undo step keeps values this way and writes them back
-/// through the field's own decoding ([jge.SchemaField.decodeInto]), so it
+/// through the field's own decoding ([jge.FieldDefinition.decodeInto]), so it
 /// puts back exactly what was there, however the field reads and writes.
-({bool ok, Object? json}) _savedValue(jge.SchemaField field, Object? value) {
+({bool ok, Object? json}) _savedValue(
+  jge.FieldDefinition field,
+  Object? value,
+) {
   try {
     return (ok: true, json: _deepCopy(field.kind.encodeAny(value)));
   } catch (_) {
@@ -697,7 +700,7 @@ class DefinitionSection extends StatelessWidget {
 
 /// [value] as a fresh object of [field]'s kind, sharing nothing with
 /// where it came from; [value] itself when the field cannot encode it.
-Object? _detached(jge.SchemaField field, Object? value) {
+Object? _detached(jge.FieldDefinition field, Object? value) {
   final saved = _savedValue(field, value);
   if (!saved.ok) return value;
   try {

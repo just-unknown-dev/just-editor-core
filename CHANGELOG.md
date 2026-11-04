@@ -2,8 +2,10 @@
 
 ## Unreleased
 
+- Requires just_game_engine ^2.0.0-dev.4 and just_game_engine_formats ^0.3.0.
 - An `EditorScope` installs the engine's built-in components (`BuiltInComponents.extension`) into its context, so it reads and writes scenes whatever world it was given.
 - `UnknownComponents` is `UnknownTypesComponent` (file `unknown_types_component.dart`), as every component's name now ends in `Component`.
+- The module API follows the engine's renames: `FieldEditorContext.field`, `FieldAccessoryContext.fields` and `FieldEditorRegistry.forField` / `canEdit` take a `FieldDefinition` (was `SchemaField`), and `Material3DWorkspaceView` works on a `Material3DFile` (was `MaterialFile`). `EditorScope.mainCamera` and `GameCameraEditorView` (`of`, `camera`) are the engine's `OutputCamera` (was `Camera`).
 
 ## 0.1.0-dev.1
 

@@ -110,7 +110,7 @@ void main() {
 
     setUp(() {
       world = World()..initialize();
-      flat = GameCameraEditorView.of(Camera(viewportSize: const Size(10, 10)));
+      flat = GameCameraEditorView.of(OutputCamera(viewportSize: const Size(10, 10)));
     });
     tearDown(() => world.dispose());
 

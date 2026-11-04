@@ -138,7 +138,7 @@ class EditorScope {
         () => SceneCodec(
           defs,
           // The prefab files the edited engine has read, as it reads them.
-          prefabs: (path) => PrefabLibrary.of(context).loaded(path),
+          prefabs: (path) => context.prefabLibrary.loaded(path),
         ),
       )
       ..registerLazySingleton<FieldEditorRegistry>(FieldEditorRegistry.new)
@@ -488,7 +488,7 @@ class EditorScope {
 
   /// The camera the view is seen through; a bare one before the engine
   /// has a viewport.
-  Camera get mainCamera => _mainCamera();
+  OutputCamera get mainCamera => _mainCamera();
 
   /// How the editor sees the scene — what everything that draws over the
   /// viewport, picks or pans goes through: the view for the scene's mode
@@ -784,10 +784,10 @@ class EditorScope {
   /// Solo read it.
   CameraBrain? get cameraBrain {
     final e = engine;
-    if (e == null || !e.isInitialized || !e.cameraSystem.isInitialized) {
+    if (e == null || !e.isInitialized || !e.camera.isInitialized) {
       return null;
     }
-    return e.cameraSystem.brain;
+    return e.camera.brain;
   }
 
   /// Where the palette group called [label] sorts; one nobody declared
@@ -894,16 +894,16 @@ class EditorScope {
 
   /// The camera new entities are placed in front of; a bare one before the
   /// engine has a viewport, which is all a HUD's entities need.
-  Camera _mainCamera() {
+  OutputCamera _mainCamera() {
     final e = engine;
-    if (e == null || !e.isInitialized || !e.cameraSystem.isInitialized) {
+    if (e == null || !e.isInitialized || !e.camera.isInitialized) {
       // One kept, so a view on it stays where it was put.
       return _bareCamera;
     }
-    return e.cameraSystem.mainCamera;
+    return e.camera.mainCamera;
   }
 
-  late final Camera _bareCamera = Camera();
+  late final OutputCamera _bareCamera = OutputCamera();
 
   /// The project's tags: its tag file, the tags code declares, and the ones
   /// the game's spawners give.

@@ -548,9 +548,9 @@ class FieldAccessoryContext {
   /// The component the [fields] belong to.
   final jge.Component component;
 
-  /// How [component] is saved and inspected: its schema.
+  /// How [component] is saved and inspected: its definition.
   final jge.ComponentDefinition definition;
 
   /// The fields the row shows.
-  final List<jge.SchemaField> fields;
+  final List<jge.FieldDefinition> fields;
 }

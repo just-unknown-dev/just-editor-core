@@ -5,7 +5,7 @@ library;
 
 import 'package:flutter/widgets.dart';
 import 'package:just_game_engine_formats/just_game_engine_formats.dart'
-    show Material2DFile, MaterialFile;
+    show Material2DFile, Material3DFile;
 
 import '../look/kit/buttons.dart';
 import '../look/kit/layout.dart';
@@ -149,20 +149,20 @@ abstract class Material2DWorkspaceView extends WorkspaceView {
 /// A 3-D material window, for what modules add to it.
 abstract class Material3DWorkspaceView extends WorkspaceView {
   /// The material as it will be saved: for a variant, what it overrides.
-  MaterialFile get material;
+  Material3DFile get material;
 
   /// What is drawn: a variant laid over its parents, a value being dragged
   /// included.
-  MaterialFile get shown;
+  Material3DFile get shown;
 
   /// Changes the material as [change] says — given what is [shown], a
   /// variant laid over its parents — as one undo step. On a variant every
   /// value it changes becomes the variant's own.
-  void change(MaterialFile Function(MaterialFile m) change);
+  void change(Material3DFile Function(Material3DFile m) change);
 
   /// Shows [change] — given what is [shown] — without an undo step, until
   /// [change] puts it in or [endPreview] lets it go.
-  void preview(MaterialFile Function(MaterialFile m) change);
+  void preview(Material3DFile Function(Material3DFile m) change);
 
   /// Stops showing a [preview].
   void endPreview();

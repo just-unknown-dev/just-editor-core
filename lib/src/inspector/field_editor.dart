@@ -37,12 +37,12 @@ class FieldEditorContext {
   });
 
   /// The definition field being edited: name, kind, limits, read/write.
-  final jge.SchemaField field;
+  final jge.FieldDefinition field;
 
   /// How the definition wants it shown.
   final jge.FieldHint hint;
 
-  /// The current value, as [jge.SchemaField.read] returned it.
+  /// The current value, as [jge.FieldDefinition.read] returned it.
   final Object? value;
 
   /// The component the field belongs to.
@@ -103,7 +103,7 @@ class FieldEditorContext {
   /// This context with a different value or writer, for a compound editor's
   /// parts.
   FieldEditorContext copyWith({
-    jge.SchemaField? field,
+    jge.FieldDefinition? field,
     jge.FieldHint? hint,
     Object? value,
     ValueChanged<Object?>? onChanged,
@@ -189,7 +189,7 @@ class FieldEditorRegistry {
 
   /// The editor for [field]: its type's, else the generic enum editor for
   /// any enum type, else null.
-  FieldEditorBuilder? forField(jge.SchemaField field) =>
+  FieldEditorBuilder? forField(jge.FieldDefinition field) =>
       _byTypeId[field.kind.id] ??
       (field.kind is jge.EnumFieldType ? _byTypeId[enumKey] : null);
 
@@ -197,7 +197,7 @@ class FieldEditorRegistry {
   Iterable<String> get typeIds => _byTypeId.keys;
 
   /// Whether [field] has an editor.
-  bool canEdit(jge.SchemaField field) => forField(field) != null;
+  bool canEdit(jge.FieldDefinition field) => forField(field) != null;
 
   /// Builds the control for [context], or the visible "no editor" row.
   Widget build(FieldEditorContext context) {

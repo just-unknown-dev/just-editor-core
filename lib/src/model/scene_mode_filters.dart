@@ -7,7 +7,7 @@ abstract final class SceneModeFilters {
   /// the hint's own choice, else the type's ([jge.FieldType.channels2D]) —
   /// a position's x and y, a rotation's z. Hidden ones keep their values.
   static Set<String> visibleChannels(
-    jge.SchemaField field,
+    jge.FieldDefinition field,
     jge.FieldHint? hint,
     jge.SceneMode mode,
   ) {

@@ -1,9 +1,9 @@
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
 import '../scope/editor_scope.dart';
-import '../model/editor_scene_state.dart';
+import '../scene/editor_scene_state.dart';
 import '../view/editor_view.dart';
-import '../model/editor_history.dart';
+import '../history/editor_history.dart';
 import 'level_designer_controller.dart';
 
 /// The Level Designer while it is open, as a module sees it: what its

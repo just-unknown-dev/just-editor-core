@@ -2,13 +2,13 @@ import 'package:flutter/painting.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 import 'package:just_signals/just_signals.dart';
 
-import '../model/editor_scene_state.dart';
-import '../model/editor_view_state.dart';
+import '../scene/editor_scene_state.dart';
+import '../scene/editor_view_state.dart';
 import 'tools/level_tool.dart';
 import 'tools/tool_registry.dart';
 import 'prefab_registry.dart';
 import 'smart_snap.dart';
-import '../model/editor_history.dart';
+import '../history/editor_history.dart';
 
 /// What the paint tool does on drag.
 enum PaintMode {
@@ -329,23 +329,6 @@ class LevelDesignerController {
 
   /// Reports a transient message, e.g. a measured distance.
   void setStatus(String message) => status.value = message;
-
-  /// Resets per-scene state. Called when a different scene is opened, because
-  /// history and guides both refer to entities from the old one.
-  void resetForScene() {
-    batch(() {
-      history.clear();
-      dragRect.value = null;
-      guides.value = const [];
-      hiddenLayers.value = <String>{};
-      lockedLayers.value = <String>{};
-      hiddenEntities.value = <jge.EntityId>{};
-      lockedEntities.value = <jge.EntityId>{};
-      snapGuides = const [];
-      spacingGuides = const [];
-      status.value = '';
-    });
-  }
 
   /// Releases every signal.
   void dispose() {

@@ -1,5 +1,6 @@
 import '../scope/editor_scope.dart';
-import '../model/editor_history.dart';
+import '../history/editor_history.dart';
+import '../history/scope_history.dart';
 
 /// A value shown in the scene for a while without being recorded — what a
 /// colour picker writes while it is open — and then put back.

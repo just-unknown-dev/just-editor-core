@@ -4,9 +4,8 @@ import 'dart:convert';
 import 'package:flutter/painting.dart' show Color;
 import 'package:just_storage/just_storage.dart';
 
-import '../look/editor_constants.dart';
-import '../look/theme_controller.dart';
 import 'gizmo_settings.dart';
+import 'overlay_settings_keys.dart';
 import 'overlay_ui_settings.dart';
 
 /// The editor's settings in its key-value store: [OverlayUiSettings] under
@@ -39,6 +38,16 @@ class OverlaySettingsStore {
     return decode(stored);
   }
 
+  /// The saved settings, as [loadSettings] gives them, and every stored key
+  /// with its raw value, as [readAll] does — from one read of the store,
+  /// not two. A store that gives its settings some other way is read again
+  /// for the raw values.
+  Future<(OverlayUiSettings, Map<String, String>)> loadAll() async {
+    _stored = null;
+    final settings = await loadSettings();
+    return (settings, Map.of(_stored ?? await readAll()));
+  }
+
   /// Writes the settings that differ from what the store holds.
   Future<void> saveSettings(OverlayUiSettings settings) async {
     final storage = await _storageFuture;
@@ -64,12 +73,12 @@ class OverlaySettingsStore {
   /// Every setting under its key, as the store keeps it: what a save
   /// writes, and what an export holds.
   static Map<String, String> encode(OverlayUiSettings s) {
-    String colour(Color? c) => c == null ? '' : c.toARGB32().toString();
+    String color(Color? c) => c == null ? '' : c.toARGB32().toString();
     return {
       OverlaySettingsPrefKeys.prefTextScale: '${s.textScale}',
       OverlaySettingsPrefKeys.prefCornerRadius: '${s.cornerRadius}',
       OverlaySettingsPrefKeys.prefThemeId: s.themeId,
-      OverlaySettingsPrefKeys.prefAccent: colour(s.accent),
+      OverlaySettingsPrefKeys.prefAccent: color(s.accent),
       OverlaySettingsPrefKeys.prefCompactness: '${s.compactness}',
       OverlaySettingsPrefKeys.prefAnimationSpeed: '${s.animationSpeed}',
       OverlaySettingsPrefKeys.prefMetricRefreshMs: '${s.metricRefreshMs}',
@@ -79,7 +88,7 @@ class OverlaySettingsStore {
       OverlaySettingsPrefKeys.prefGridSize: '${s.gridSize}',
       OverlaySettingsPrefKeys.prefBoldText: '${s.boldText}',
       OverlaySettingsPrefKeys.prefHighContrast: '${s.highContrast}',
-      OverlaySettingsPrefKeys.prefColourBlindSafe: '${s.colourBlindSafe}',
+      OverlaySettingsPrefKeys.prefColorBlindSafe: '${s.colorBlindSafe}',
       OverlaySettingsPrefKeys.prefReduceMotion: '${s.reduceMotion}',
       OverlaySettingsPrefKeys.prefLongerTimings: '${s.longerTimings}',
       OverlaySettingsPrefKeys.prefAlwaysShowFocus: '${s.alwaysShowFocus}',
@@ -100,11 +109,11 @@ class OverlaySettingsStore {
       OverlaySettingsPrefKeys.prefUndoLimit: '${s.undoLimit}',
       OverlaySettingsPrefKeys.prefConfirmDelete: '${s.confirmDelete}',
       OverlaySettingsPrefKeys.prefClosePrompt: s.closePrompt.name,
-      OverlaySettingsPrefKeys.prefGridColour: colour(s.gridColour),
+      OverlaySettingsPrefKeys.prefGridColor: color(s.gridColor),
       OverlaySettingsPrefKeys.prefGridOpacity: '${s.gridOpacity}',
-      OverlaySettingsPrefKeys.prefBackdrop: colour(s.backdrop),
+      OverlaySettingsPrefKeys.prefBackdrop: color(s.backdrop),
       OverlaySettingsPrefKeys.prefGizmoScale: '${s.gizmoScale}',
-      OverlaySettingsPrefKeys.prefSelectionColour: colour(s.selectionColour),
+      OverlaySettingsPrefKeys.prefSelectionColor: color(s.selectionColor),
       OverlaySettingsPrefKeys.prefGizmosEditor: s.gizmos.editor.encode(),
       OverlaySettingsPrefKeys.prefGizmosDesigner: s.gizmos.designer.encode(),
       OverlaySettingsPrefKeys.prefGizmosPlay: s.gizmos.play.encode(),
@@ -133,7 +142,7 @@ class OverlaySettingsStore {
       return raw == null ? fallback : raw == 'true';
     }
 
-    Color? colour(String key, Color? fallback) {
+    Color? color(String key, Color? fallback) {
       final raw = values[key];
       if (raw == null) return fallback;
       final argb = int.tryParse(raw);
@@ -146,10 +155,9 @@ class OverlaySettingsStore {
     var themeId = values[OverlaySettingsPrefKeys.prefThemeId];
     var accent = int.tryParse(values[OverlaySettingsPrefKeys.prefAccent] ?? '');
     if (themeId == null) {
-      // Nothing chosen yet: the first of the built-in themes.
-      final (id, _, colour) = ThemeController.builtIn.first;
-      themeId = id;
-      accent = colour.toARGB32();
+      // Nothing chosen yet: the default theme, the first built-in one.
+      themeId = OverlayUiSettings.defaultThemeId;
+      accent = OverlayUiSettings.defaultAccent.toARGB32();
     }
 
     return OverlayUiSettings(
@@ -195,9 +203,9 @@ class OverlaySettingsStore {
         OverlaySettingsPrefKeys.prefHighContrast,
         d.highContrast,
       ),
-      colourBlindSafe: flag(
-        OverlaySettingsPrefKeys.prefColourBlindSafe,
-        d.colourBlindSafe,
+      colorBlindSafe: flag(
+        OverlaySettingsPrefKeys.prefColorBlindSafe,
+        d.colorBlindSafe,
       ),
       reduceMotion: flag(
         OverlaySettingsPrefKeys.prefReduceMotion,
@@ -284,23 +292,23 @@ class OverlaySettingsStore {
         ClosePrompt.values,
         d.closePrompt,
       ),
-      gridColour:
-          colour(OverlaySettingsPrefKeys.prefGridColour, d.gridColour) ??
-          d.gridColour,
+      gridColor:
+          color(OverlaySettingsPrefKeys.prefGridColor, d.gridColor) ??
+          d.gridColor,
       gridOpacity: decimal(
         OverlaySettingsPrefKeys.prefGridOpacity,
         d.gridOpacity,
         OverlayUiSettings.gridOpacityRange,
       ),
-      backdrop: colour(OverlaySettingsPrefKeys.prefBackdrop, d.backdrop),
+      backdrop: color(OverlaySettingsPrefKeys.prefBackdrop, d.backdrop),
       gizmoScale: decimal(
         OverlaySettingsPrefKeys.prefGizmoScale,
         d.gizmoScale,
         OverlayUiSettings.gizmoScaleRange,
       ),
-      selectionColour: colour(
-        OverlaySettingsPrefKeys.prefSelectionColour,
-        d.selectionColour,
+      selectionColor: color(
+        OverlaySettingsPrefKeys.prefSelectionColor,
+        d.selectionColor,
       ),
       gizmos: GizmoSettings(
         editor: GizmoModeSettings.decode(

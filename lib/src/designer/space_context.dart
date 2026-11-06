@@ -33,7 +33,7 @@ final class SpaceContext {
   final Offset screen;
 
   /// The ray from the eye through the pointer.
-  final jge.Ray3 ray;
+  final jge.Ray3D ray;
 
   /// The plane built on where nothing is under the pointer.
   final WorkingPlane plane;

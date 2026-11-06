@@ -50,8 +50,8 @@ void main() {
         editors: scope.fieldEditors,
       ),
     );
-    expect(row, isA<DropdownEditorRow>());
-    (row as DropdownEditorRow).onChanged('10');
+    expect(row, isA<DropdownFieldRow>());
+    (row as DropdownFieldRow).onChanged('10');
     expect(written, 10);
     expect(row.value, '5');
     await tester.pumpWidget(

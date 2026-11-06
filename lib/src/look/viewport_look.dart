@@ -1,23 +1,22 @@
 import 'package:flutter/painting.dart';
 
 import '../settings/overlay_ui_settings.dart';
+import 'editor_metrics.dart';
 
 /// How the viewport draws what the editor adds to the game — the grid, the
 /// handles, the selection — as the settings make it.
 ///
 /// Read by painters, which run on the engine's canvas outside any widget,
-/// so like `EditorMetrics` these are statics: the plugin applies the
-/// settings, and the next frame paints with them.
+/// so like [EditorMetrics] these are statics, and they read the settings
+/// [EditorMetrics.apply] was last given: the host applies them once, and
+/// the next frame paints with them.
 abstract final class ViewportLook {
-  static OverlayUiSettings _s = const OverlayUiSettings.defaults();
-
-  /// Takes the look from [s].
-  static void apply(OverlayUiSettings s) => _s = s;
+  static OverlayUiSettings get _s => EditorMetrics.settings;
 
   /// A grid line at [alpha] of full strength, as the settings colour and
   /// strengthen it: `gridLine(0.14)` for a major line, drawn as before at
   /// the defaults.
-  static Color gridLine(double alpha) => _s.gridColour.withValues(
+  static Color gridLine(double alpha) => _s.gridColor.withValues(
     alpha: (alpha * _s.gridOpacity).clamp(0.0, 1.0).toDouble(),
   );
 
@@ -26,9 +25,9 @@ abstract final class ViewportLook {
   static double get gizmoScale => _s.gizmoScale;
 
   /// The outline round what is selected in the editor's view.
-  static Color get selection => _s.selectionColour ?? const Color(0xFF40E0D0);
+  static Color get selection => _s.selectionColor ?? const Color(0xFF40E0D0);
 
   /// The outline round what is selected in the Level Designer.
   static Color get designerSelection =>
-      _s.selectionColour ?? const Color(0xFF5AC8FA);
+      _s.selectionColor ?? const Color(0xFF5AC8FA);
 }

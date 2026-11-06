@@ -174,7 +174,7 @@ class EditorThemeData {
   /// Okabe–Ito set, which does not lean on red against green: vermilion
   /// for errors, yellow for warnings, sky blue for success, reddish purple
   /// for information. The icons beside them say the same again.
-  EditorThemeData colourBlindSafe() => copyWith(
+  EditorThemeData colorBlindSafe() => copyWith(
     error: const Color(0xFFFF7A33),
     errorLight: const Color(0xFFFFA36B),
     warning: const Color(0xFFF0E442),

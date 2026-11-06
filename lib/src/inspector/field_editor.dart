@@ -2,9 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
 import '../scope/editor_scope.dart';
-import '../model/editor_scene_state.dart';
+import '../scene/editor_scene_state.dart';
 import '../look/widgets/scrubbable_number_field.dart' show NumberScrubConfig;
-import 'field_rows.dart';
+import 'rows/text_field_rows.dart';
 import 'live_preview.dart';
 
 /// What [component]'s unset colour field [field] falls back to, or null
@@ -203,7 +203,7 @@ class FieldEditorRegistry {
   Widget build(FieldEditorContext context) {
     final builder = forField(context.field);
     if (builder == null) {
-      return ReadonlyRow(
+      return ReadonlyFieldRow(
         label: context.label,
         value: '${context.value} (no editor for "${context.field.kind.id}")',
       );

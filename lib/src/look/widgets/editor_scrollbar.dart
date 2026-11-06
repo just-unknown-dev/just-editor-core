@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../editor_constants.dart';
+import '../editor_theme.dart';
 
 /// Builds a scrollable around [controller].
 typedef ScrollableBuilder =

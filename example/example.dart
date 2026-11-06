@@ -101,7 +101,7 @@ class CoinModule extends EditorModule {
   /// The inspector's control for a [CoinValueFieldType] field, by its id.
   @override
   Map<String, FieldEditorBuilder> get fieldEditors => {
-    'coins.value': (field) => DropdownEditorRow(
+    'coins.value': (field) => DropdownFieldRow(
       label: field.label,
       value: '${field.value}',
       options: const ['1', '5', '10'],

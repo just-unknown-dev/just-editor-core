@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import '../look/editor_constants.dart';
-import '../look/editor_metrics.dart';
 import '../scope/editor_scope.dart';
-import '../model/component_registry.dart';
-import '../model/editor_scene_state.dart';
-import '../model/editor_history.dart';
-import '../model/editor_commands.dart';
-import '../look/kit/kit.dart';
+import 'component_entry.dart';
+import '../scene/editor_scene_state.dart';
+import '../history/editor_history.dart';
+import '../history/entity_commands.dart';
+import '../look/look.dart';
+import '../history/scope_history.dart';
 
 /// An expandable in-place panel that lets the user search for and add a
 /// component to the currently selected entity.
@@ -104,7 +103,7 @@ class _AddComponentPickerState extends State<AddComponentPicker>
   }
 
   List<ComponentEntry> get _filtered {
-    final allEntries = getComponentRegistryEntries(widget.scope);
+    final allEntries = componentEntries(widget.scope);
     if (_query.isEmpty) return allEntries;
     return allEntries
         .where(
@@ -253,12 +252,12 @@ class _PickerList extends StatelessWidget {
     for (final entry in filtered) {
       grouped.putIfAbsent(entry.group, () => []).add(entry);
     }
-    // kComponentGroups orders the sections it names; anything else follows,
+    // _componentGroups orders the sections it names; anything else follows,
     // alphabetically. Treating it as a whitelist — which it used to be — made
     // a project's own component group invisible here, search included.
-    final known = kComponentGroups.where(grouped.containsKey);
+    final known = _componentGroups.where(grouped.containsKey);
     final extra =
-        grouped.keys.where((g) => !kComponentGroups.contains(g)).toList()
+        grouped.keys.where((g) => !_componentGroups.contains(g)).toList()
           ..sort();
     final orderedGroups = [...known, ...extra];
 
@@ -450,3 +449,23 @@ class _ComponentRow extends StatelessWidget {
     );
   }
 }
+
+// The order of the Add Component picker's sections, by group name.
+//
+// This is an *ordering hint*, not a whitelist. A group a component
+// declares that is not listed here still appears, after these in
+// alphabetical order, and its components are found by search like any
+// other.
+const List<String> _componentGroups = [
+  'Core',
+  'Rendering',
+  'Physics',
+  'Gameplay',
+  'Input',
+  'Camera',
+  'Audio',
+  'Animation',
+  'Hierarchy',
+  'Effects',
+  'UI',
+];

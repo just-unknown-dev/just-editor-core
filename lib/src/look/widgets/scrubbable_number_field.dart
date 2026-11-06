@@ -1,9 +1,9 @@
-import '../../inspector/field_style.dart';
+import '../inspector_field.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../editor_constants.dart';
+import '../editor_theme.dart';
 import '../kit/fields.dart' show PendingFieldEdits, isEscapeDown;
 
 /// Drag-to-scrub configuration for numeric inspector fields: how far a drag

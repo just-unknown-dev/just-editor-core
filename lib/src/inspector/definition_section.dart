@@ -1,24 +1,25 @@
-import '../model/scene_mode_filters.dart';
+import '../scene/scene_mode_filters.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
-import '../look/editor_constants.dart';
-import '../look/editor_metrics.dart';
-import '../look/kit/kit.dart';
+import '../look/look.dart';
 import 'package:just_signals/just_signals.dart';
 import '../scope/editor_scope.dart';
-import '../model/unknown_types_component.dart';
-import '../model/editor_scene_state.dart';
-import '../extension/editor_contributions.dart';
-import '../model/editor_commands.dart';
-import '../model/editor_history.dart';
+import '../scene/unknown_types_component.dart';
+import '../scene/editor_scene_state.dart';
+import '../history/entity_commands.dart';
+import '../history/editor_history.dart';
 import 'component_extras.dart';
 import 'component_reorder.dart';
 import 'field_editor.dart';
-import 'field_rows.dart';
+import 'rows/number_field_rows.dart';
 import 'live_preview.dart';
+import '../history/scope_history.dart';
+import '../scene/scope_scene.dart';
+import 'inspector_contributions.dart';
+import 'scope_inspector.dart';
 
 /// One inspector section per component on [entity], built from each
 /// component's definition. A component with no definition is not shown: it
@@ -86,7 +87,7 @@ List<Widget> buildComponentSections({
       if (hidden.contains(component.runtimeType))
         const SizedBox.shrink()
       else if (component is UnknownTypesComponent)
-        UnknownComponentsCard(component: component)
+        UnknownTypesCard(component: component)
       else if (scope.definitionForInspector(component) case final definition?)
         // Keyed by type, so a card that moves keeps its own fields' state.
         ComponentDropZone(
@@ -140,8 +141,8 @@ List<Widget> buildComponentSections({
 
 /// What a scene named that nothing registered can read: listed, not
 /// editable, and saved back exactly as it came.
-class UnknownComponentsCard extends StatelessWidget {
-  const UnknownComponentsCard({super.key, required this.component});
+class UnknownTypesCard extends StatelessWidget {
+  const UnknownTypesCard({super.key, required this.component});
 
   /// What the scene held that nothing could read; the card's title lists
   /// its [UnknownTypesComponent.types].
@@ -618,6 +619,26 @@ class DefinitionSection extends StatelessWidget {
     return custom != null ? custom(ctx) : scope.fieldEditors.build(ctx);
   }
 
+  /// What an undo step calls [field]: its label, and — where another field
+  /// of the definition has the same one, a framing camera's two "Height"s
+  /// — the row or group it is in before it: "Dead zone Height".
+  String _editedName(jge.FieldDefinition field, jge.FieldHint hint) {
+    String labelOf(String name) => hints.fields[name]?.label ?? name;
+    final label = hint.label ?? field.name;
+    final repeated = definition.fields.any(
+      (f) => f.name != field.name && labelOf(f.name) == label,
+    );
+    if (!repeated) return label;
+    final row = hints.fieldRows
+        .where((r) => r.cells.containsKey(field.name))
+        .firstOrNull;
+    final group = (hints.fieldGroups ?? const <String, List<String>>{}).entries
+        .where((g) => g.value.contains(field.name))
+        .firstOrNull;
+    final where = row?.label ?? group?.key;
+    return where == null ? label : '$where $label';
+  }
+
   FieldEditorContext _context(jge.FieldDefinition field) {
     final hint = hints.fields[field.name] ?? const jge.FieldHint();
     return FieldEditorContext(
@@ -662,8 +683,10 @@ class DefinitionSection extends StatelessWidget {
         // instead of one per pixel; a press in the card starts a new one.
         (history ?? scope.history).push(
           ComponentFieldCommand(
-            label: 'Change ${hint.label ?? field.name}',
+            label: 'Change ${_editedName(field, hint)}',
             component: component,
+            // What keeps two fields with one label two undo steps.
+            field: field.name,
             entity: entity,
             write: asSaved
                 ? (c, v) => field.decodeInto(c, v)

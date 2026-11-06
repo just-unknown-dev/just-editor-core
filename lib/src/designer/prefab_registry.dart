@@ -14,7 +14,7 @@ enum PrefabPlacement {
 
 /// The colours the editor's own prefabs come in, by what they are for —
 /// for a module's prefabs to sit beside them.
-abstract final class PrefabColours {
+abstract final class PrefabColors {
   /// Plain geometry and annotations.
   static const Color shape = Color(0xFF6D8A99);
 

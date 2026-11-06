@@ -6,7 +6,7 @@ import '../../scope/editor_scope.dart';
 import '../grid/grid_topology.dart';
 import '../grid/square_grid.dart';
 import '../level_designer_controller.dart';
-import '../../model/modifier_keys.dart';
+import '../../input/modifier_keys.dart';
 import '../snap_provider.dart';
 import '../space_context.dart';
 import '../../view/editor_view.dart';

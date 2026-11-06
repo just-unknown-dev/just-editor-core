@@ -41,7 +41,7 @@ A bug report should have:
 - for a keyboard bug, the keyboard layout, and whether you changed the key in Settings → Keyboard;
 - for a bug in how the kit looks, a screenshot, the window size, and your Appearance and Accessibility settings.
 
-Some bugs belong elsewhere. If the problem shows with a bare `EditorScope` and no editor, it is most likely here. The editor's windows, docks, overlay and right panel, the Level Designer and Level Map themselves, the timeline, play-testing, the Asset Store window and the built-in tools belong to [`just_game_engine_editor`](https://github.com/just-unknown-dev/just-game-engine-editor/issues). A module's tools belong to its package: the interface editor to `just_ui_editor`, the Sprite Studio to `just_sprite_editor`, the Input Actions editor to `just_input_editor`, the material add-on to `just_material_editor`, and a kit's prefabs and tools to `just_platformer_kit`, `just_third_person_kit` or `just_world_builder_kit`. Components and their definitions belong to `just_game_engine`; the scene format, its migrations and the starter scenes to `just_game_engine_formats`; the colour picker to `just_colours`.
+Some bugs belong elsewhere. If the problem shows with a bare `EditorScope` and no editor, it is most likely here. The editor's windows, docks, overlay and right panel, the Level Designer and Level Map themselves, the timeline, play-testing, the Asset Store window and the built-in tools belong to [`just_game_engine_editor`](https://github.com/just-unknown-dev/just-game-engine-editor/issues). A module's tools belong to its package: the interface editor to `just_ui_editor`, the Sprite Studio to `just_sprite_editor`, the Input Actions editor to `just_input_editor`, and a kit's prefabs and tools to `just_platformer_kit`, `just_third_person_kit` or `just_world_builder_kit`. Components and their definitions belong to `just_game_engine`; the scene format, its migrations and the starter scenes to `just_game_engine_formats`; the colour picker to `just_colours`.
 
 For a feature, open an issue labelled **`enhancement`** that describes the problem it solves and how it should behave. The package's scope is what modules build on: the `EditorModule` contract and its contributions, `EditorScope` and its services, undo and the commands, the scene codec and store, project files, the inspector's rows, the Level Designer's tool and overlay API, views and picking, keys, and the UI kit. A tool the user sees belongs to the editor or a module; this package gains what more than one of them needs. A change to `EditorModule` affects every module, and a change to what `SceneCodec` and `SceneStore` write affects every game's levels, so open the issue first and agree the approach before you write it.
 
@@ -96,54 +96,71 @@ List only what you have checked out. `just_game_engine` has `just_*` dependencie
 
 Do not change `pubspec.yaml` to a path dependency. If your pull request needs a version of a `just_*` package that is not published yet, say so in the pull request: this package can only be released after it.
 
-Nine packages build on this one: the editor, `just_game_engine_editor`, the host that runs the modules; the modules `just_ui_editor`, `just_sprite_editor`, `just_input_editor` and `just_material_editor`; and the kits `just_platformer_kit`, `just_third_person_kit` and `just_world_builder_kit`. A release of this package comes before the releases of theirs that need it. If you change the public API, above all `EditorModule`, point at least the editor at your checkout and run its `flutter analyze` and `flutter test`, and say in the pull request what each of them will need.
+Seven packages build on this one: the editor, `just_game_engine_editor`, the host that runs the modules; the modules `just_ui_editor`, `just_sprite_editor` and `just_input_editor`; and the kits `just_platformer_kit`, `just_third_person_kit` and `just_world_builder_kit`. A release of this package comes before the releases of theirs that need it. If you change the public API, above all `EditorModule`, point at least the editor at your checkout and run its `flutter analyze` and `flutter test`, and say in the pull request what each of them will need.
 
 ---
 
 ## How the Package Fits Together
 
-`EditorScope` holds one editor's registries and services in a `just_di` container. `EditorModule`s fill it: the host's built-ins first (`builtIns:`), then the modules a game passes in, and `reload()` builds every registry again from them. The host, `just_game_engine_editor`, makes the scope, wires it to its windows (`EditorScopeHost`, in `host.dart`), and draws its docks, inspector and Level Designer from what the registries hold. The editor's [ARCHITECTURE.md](https://github.com/just-unknown-dev/just-game-engine-editor/blob/main/ARCHITECTURE.md#the-module-contract) explains the module contract member by member.
+`EditorScope` is the kernel: one editor's services in a `just_di` container. It knows the edited engine, the settings, the theme, the chrome's state and the log, and nothing of any feature. Each feature adds what it owns as an extension on it, made the first time it is asked for through `EditorScope.service`: `ScopeScene` (`scope.sceneState`, `scope.codec`, `scope.scenes`), `ScopeHistory` (`scope.history`), `ScopeProject` (`scope.tags`, `scope.colors`), `ScopeAssets` (`scope.assetIndex`), `ScopeDesigner` (`scope.commands`, `scope.prefabs`, `scope.grid`) and `ScopeInspector` (`scope.fieldEditors`). A module or the host keeps a per-editor service of its own the same way. `ScopeModules` adds the modules and what they contribute: docks, workspaces, the editor's view, the chosen Level Designer.
+
+`EditorModule`s fill the scope. They join as it is made (`ScopeModule.attach`): the host's built-ins first (`builtIns:`), then the modules a game passes in. `reload()` builds every registry again from them. The host, `just_game_engine_editor`, makes the scope, wires it to its windows (`ScopeHost`, in `host.dart`), and draws its docks, inspector and Level Designer from what the registries hold. The editor's [ARCHITECTURE.md](https://github.com/just-unknown-dev/just-game-engine-editor/blob/main/ARCHITECTURE.md#the-module-contract) explains the module contract member by member.
 
 The libraries:
 
 | Library | For |
 |---------|-----|
-| `lib/just_editor_core.dart` | What a module imports: everything a module may call, without the host's parts (`EditorScopeHost`, `EditorLogSession` and a few helpers) |
-| `lib/host.dart` | Everything, for the editor that hosts modules |
-| `lib/kit.dart` | The UI kit alone, with the theme, its sizes and the settings they follow, for a tool that draws like the editor |
+| `lib/just_editor_core.dart` | What a module imports: every feature's barrel, without the host's parts (`ScopeHost`, `ScopeAuthoredState`, `EditorLogSession`, `AssetReferences` and a few helpers) |
+| `lib/host.dart` | Every feature's barrel, for the editor that hosts modules |
+| `lib/kit.dart` | The look's barrel (the UI kit, the theme and its sizes) and the settings they follow, for a tool that draws like the editor. It imports no engine |
 | `lib/io.dart` | `dart:io`'s files, folders, platform and processes on native platforms; stand-ins with the same members on the web |
 
-In `lib/src/`:
+In `lib/src/`, one folder per feature. Each has one barrel, named after it (`scene/scene.dart`), that exports the whole folder, subfolders included. A file no barrel exports marks its declarations `@internal`. The folders, bottom to top:
 
-| Folder | Contents |
-|--------|----------|
-| `extension/` | `EditorModule` and its contributions (editor, designer and workspace contributions), asset kinds, `AssetIndex` and `AssetReferences`, markers, viewport overlays and handles, prefab variants, Tiled object mappers, level aids |
-| `scope/` | `EditorScope`, and `EditorScopeHost`, the host's side of it |
-| `model/` | `EditorHistory` and the entity and hierarchy commands, `ComponentEdit`, `CommandRegistry`, `DesignerCommand` and `KeyBinding`, `EditorKeys` and `ModifierKeys`, `EditorSceneState`, `EditorViewState`, `Designer3DState`, `SceneCodec`, `SceneStore`, `UnknownTypesComponent` |
-| `designer/` | The Level Designer's API: `DesignerSession`, the tools (`LevelToolHandler`, `PathTool`, `ToolRegistry`), overlays, snapping (`SnapProvider`, `SmartSnap`), grids, prefabs, layers, and in 3-D the working plane, placement and arrays |
-| `inspector/` | `DefinitionSection` and `buildComponentSections`, the field rows, `FieldEditorRegistry`, component extras, `CollectionEditor`, `AddComponentPicker`, `LivePreview` |
-| `view/` | `EditorView`, `GameCameraEditorView`, `EntityPicker`, `RayEntityPicker` and `RayTriangles`, `HandleDragSession` |
-| `project/` | The project's tags, physics layers and colours, and the tag uses in saved files |
-| `settings/` | `EditorPrefs` and `SettingPref`, the editor's own store, the overlay and gizmo settings, the chrome's state |
-| `services/` | The log (`EditorLogService`), `ProjectFiles`, `PackageAssetPaths` |
-| `validation/` | `SceneValidator`, `ValidationContext`, `SceneProblem` |
-| `scene_tree/` | `SceneTreeModel` and the row tile |
-| `look/` | `EditorTheme`, `EditorThemeData`, `EditorMetrics`, `ThemeController`, `ViewportLook`; `kit/` and `widgets/`, the shared widgets every panel, dock, dialog and module is built from |
-| `io/` | The `dart:io` seam behind `package:just_editor_core/io.dart` |
+| Layer | Folder | Contents |
+|-------|--------|----------|
+| 1 | `io/` | The `dart:io` seam behind `io.dart` |
+| 1 | `input/` | `EditorKeys`, `ModifierKeys` |
+| 1 | `view/` | `EditorView`, `GameCameraEditorView`, `OrbitFlyEditorView` and `View3DPose`, `EntityPicker`, `RayEntityPicker`, `RayTriangles` |
+| 1 | `settings/` | `EditorPrefs` and `SettingPref`, the editor's own store, `OverlaySettingsStore` and its keys, the overlay and gizmo settings, `EditorChromeState` |
+| 1 | `log/` | `EditorLogService`, its entries, storage and limits |
+| 2 | `look/` | `EditorTheme`, `EditorThemeData`, `EditorMetrics`, `ThemeController`, `ViewportLook`, `InspectorField`; `kit/` and `widgets/`, the shared widgets every panel, dock, dialog and module is built from |
+| 3 | `scope/` | `EditorScope` (the kernel), `ScopeModule`, `EditorScopeProvider` |
+| 4 | `assets/` | `ProjectFiles`, `PackageAssetPaths`, `AssetIndex`, `AssetReferences`, `AssetKind` and `AssetDrop`, `AudioDrop`, `ScopeAssets` |
+| 5 | `scene/` | `EditorSceneState`, `EditorViewState`, `SceneCodec`, `SceneStore`, `TransformSnapshot`, `UnknownTypesComponent`, the scene checks (`SceneValidator`), `ScopeScene` |
+| 5 | `project/` | The project's tags, physics layers and colors, the tag uses in saved files, `ScopeProject` |
+| 6 | `history/` | `EditorHistory`, the entity and hierarchy commands, `ComponentEdit`, `ScopeHistory` |
+| 7 | `designer/` | The Level Designer's API: `DesignerSession`, the tools (`LevelToolHandler`, `PathTool`, `ToolRegistry`), overlays, snapping (`SnapProvider`, `SmartSnap`), grids (`SquareGrid`, `HexGrid`), prefabs, layers, `CommandRegistry`, `DesignerCommand` and `KeyBinding`, and in 3-D `Designer3DState`, the working plane, placement and arrays; `ScopeDesigner` |
+| 7 | `inspector/` | `DefinitionSection` and `buildComponentSections`, the field rows (`rows/`), `FieldEditorRegistry`, component extras, `CollectionEditor`, `AddComponentPicker`, `LivePreview`, the colour picker, `ScopeInspector` |
+| 7 | `scene_tree/` | `SceneTreeModel` and the row tile |
+| 8 | `modules/` | `EditorModule` and its contributions, `ModuleRegistry`, `ModuleFailureReporter`, markers, viewport overlays and handles, `HandleDragSession`, prefab variants, Tiled object mappers, level aids, `HexGridModule`; the wiring that reads the modules into a scope (`ScopeModules`, `ScopeHost`) |
 
-Beside it, `example/example.dart` is a module, what pub.dev shows a module author first, and `test/` holds the tests, with shared helpers in `test/support/`.
+Beside it, `example/example.dart` is a module, what pub.dev shows a module author first, and `test/` mirrors `lib/src/`: a feature's tests are in `test/<feature>/`, with shared helpers in `test/support/`.
+
+### Layers
+
+A feature imports only features in its own layer or below, and never in a loop. `test/library_layout_test.dart` holds that, and the barrels' rules. What puts each feature where:
+
+- **The leaves import no other feature.** The settings and the log keep their own constants; `look/` imports only the settings and the keys.
+- **The kernel knows no feature.** `scope/` imports only the leaves and the look, so every feature can take an `EditorScope`.
+- **A feature's accessors on the scope are its own extension** (`ScopeScene`, `ScopeHistory` and the rest), so the scope never imports the feature. Code that reads `scope.history` imports `ScopeHistory`.
+- **`scene/` and `project/` share a layer**: `project/` reads the scenes, for the tags they carry; `scene/` never reads `project/`.
+- **`modules/` is the composition root.** The module contract names every feature, and only the wiring there reads the modules' contributions into a scope.
+- **`kit.dart` stays engine-free.** Its closure is Flutter and `just_signals`, so a tool can draw like the editor without the engine.
+
+Loops inside one feature are allowed: `designer/` with `designer/grid/` and `designer/tools/`, `look/` with `look/kit/` and `look/widgets/`, `inspector/` with `inspector/rows/`, and files within `assets/` and `modules/`.
 
 A few rules hold the package together. Keep them:
 
-- **It compiles everywhere.** A module, and the editor that imports this package, sit in a game's editor entry point, and the game still builds for Android, iOS, the web and wasm. So `lib/` imports `dart:io` only behind a conditional import: in the seam (`lib/src/io/io_native.dart`) and in the native halves of the log's and the settings' storage (`*_io.dart`). Everything else imports `io.dart`. Tests may import `dart:io`.
-- **The core knows no host.** Nothing here imports `just_game_engine_editor` or a module's package: the dependency goes one way. What only the host calls goes in `host.dart` alone, hidden from `just_editor_core.dart`, as `EditorScopeHost` and `EditorLogSession` are; what only the editor's own windows draw stays in the editor.
+- **It compiles everywhere.** A module, and the editor that imports this package, sit in a game's editor entry point, and the game still builds for Android, iOS, the web and wasm. So `lib/` imports `dart:io` only behind a conditional import: in the seam (`lib/src/io/io_native.dart`) and in the native halves of the log's and the settings' storage (`*_io.dart`). Everything else in `lib/src/` imports the seam's barrel, `src/io/io.dart`, never the public `io.dart`. Tests may import `dart:io`.
+- **The core knows no host.** Nothing here imports `just_game_engine_editor` or a module's package: the dependency goes one way. What only the host calls goes in `host.dart` alone, hidden from `just_editor_core.dart`, as `ScopeHost` and `EditorLogSession` are; what only the editor's own windows draw stays in the editor.
 - **Files are written safely.** Write a project file through `ProjectFiles` (`writeString`, `writeBytes`: whole or not at all; `rename`: safe for a change of case, never over another file), and refuse a path read out of a file that would leave the project (`ProjectFiles.isContained`, `PackageAssetPaths.isWritable`). Compare paths with `ProjectFiles.samePath`, never `==`: Windows and macOS fold case.
 - **Every OS's keys.** Bind keys through `KeyBinding` and read modifiers through `ModifierKeys` or `EditorKeys`, never `isControlPressed`: the primary modifier is Cmd on macOS, where Backspace deletes too. Settings store `Ctrl+` on every OS.
 - **The game reads what the editor saves.** `SceneCodec` encodes components only through their `ComponentDefinition`, from the registry the game loads with, and the game loads the same file through the engine's `SceneLoader`. The format version (`SceneFormat.current`), the migrations and the starter scenes (`SceneStarters`) live in `just_game_engine_formats`, so a format change starts there. A scene's `editor` section is the editor's alone; a module writes under its id with `saveEditorData`.
-- **Nothing saved is lost.** Components no definition can read are kept in `UnknownTypesComponent` and written back unchanged. A scene or project file that is there but cannot be read is an error, never an empty one to be saved over. Anything that previews a change in the live world registers an authored-state guard (`EditorScope.authoredStateGuards`; `LivePreview` does), so no preview reaches a save or a play-test.
-- **One undo stack.** Every edit to the scene is an `EditorCommand` on `scope.history` (`EditorHistory`), one step per gesture: a field is a `ComponentFieldCommand`, an edit to a whole component goes through `ComponentEdit.begin` … `commit`, and several changes are one `CompositeCommand`. An undone delete brings an entity back under a new id, so a command finds its entity as it is now (`EditorSceneState.entityRebuilt`), never by the id it first saw.
+- **Nothing saved is lost.** Components no definition can read are kept in `UnknownTypesComponent` and written back unchanged. A scene or project file that is there but cannot be read is an error, never an empty one to be saved over. Anything that previews a change in the live world registers an authored-state guard (`ScopeAuthoredState.authoredStateGuards`; `LivePreview` does), so no preview reaches a save or a play-test.
+- **One undo stack.** Every edit to the scene is an `EditorCommand` on `scope.history` (`EditorHistory`), one step per gesture: a field is a `ComponentFieldCommand`, which names the field it writes so that two fields labelled alike never merge into one step, an edit to a whole component goes through `ComponentEdit.begin` … `commit`, and several changes are one `CompositeCommand`. An undone delete brings an entity back under a new id, so a command finds its entity as it is now (`EditorSceneState.entityRebuilt`), never by the id it first saw.
 - **No process-wide registries.** Every registry and service belongs to an `EditorScope`; two scopes share nothing, and `reload()` rebuilds them all from the built-ins and the registered modules, so nothing piles up across hot reloads. The built-ins register exactly as a module does.
-- **One module's mistake stays its own.** A module that throws while it registers is left out and said in the log, and the others load; one replaced by another of its id is let go of properly. Anything new that calls into a module must keep that.
+- **One module's mistake stays its own.** A module that throws while it registers is left out and said in the log, and the others load. Every call into a module tells of a throw one way, through `ModuleFailureReporter`: in the log, category `modules`; one replaced by another of its id is let go of properly. Anything new that calls into a module must keep that.
 - **What is built from code is a getter.** Styles, definitions, markers, `SettingPref`s and shared vectors are getters (or consts), never `static final`, so a hot reload brings them up to date and nobody changes a shared value in place. `EditorModule.onRegister` runs once per module; `onReassemble` runs after each hot reload.
 - **Every `EditorModule` member has a default** (an empty list, null, or nothing to do), so a module overrides only what it adds. Give a new member one too. Ids are saved: a module's id keys its `editor` data in scenes, dock ids key the layout in the `editor.docks` preference, and command ids key the user's changed keys in `editor.keys.shortcuts`, so never rename one.
 - **`just_game_engine_cli` knows this package by name.** Its release check (`ReleaseRules`) fails a release build that holds `just_editor_core` or the class name `EditorScope`, and `just create` adds `just_editor_core` to a new game at a set version. Rename `EditorScope`, or release a new minor version, and `just_game_engine_cli` must change with it.
@@ -152,27 +169,28 @@ A few rules hold the package together. Keep them:
 
 ## Running the Tests
 
-Run every command from the repository root: `test/hygiene_test.dart`, `test/hot_reload_hygiene_test.dart` and `test/editor_dropdown_test.dart` read `lib/` from disk.
+Run every command from the repository root: `test/library_layout_test.dart`, `test/no_static_final_styles_test.dart` and `test/look/editor_dropdown_test.dart` read `lib/` from disk.
 
 ```bash
 # The whole suite.
 flutter test
 
 # One file.
-flutter test test/editor_history_test.dart
+flutter test test/history/editor_history_test.dart
 ```
 
 `dart_test.yaml` gives every test twice the default 30 s, for the tests that boot an engine or touch the disk on a busy machine. No test here needs a GPU.
 
 **Tests that hold the rules.**
 
-- `test/hygiene_test.dart` and `test/hot_reload_hygiene_test.dart` fail on a `static final` or top-level `final` that makes a `TextStyle`, `PrefabDefinition`, `WorkspaceDefinition`, `DockDefinition`, `EditorMarker`, `SettingPref`, `Vector2` or `Vector3`, or that reads `EditorTheme`. Make it a getter.
-- `test/editor_dropdown_test.dart` fails on a Material `DropdownButton` or `DropdownButtonFormField` in `lib/`. Use `EditorDropdown`.
-- `test/scene_starters_parity_test.dart` encodes the engine's live components through `SceneCodec` and compares them with the starter scenes in `just_game_engine_formats`. It fails when a component's saved form changes, here or in `just_game_engine`: update the starters in `just_game_engine_formats` to match.
+- `test/library_layout_test.dart` holds the layout above: every file exported by its barrel or `@internal`, one barrel per folder, the kernel importing no feature, no loop and no import up a layer, `kit.dart` engine-free, and `dart:io` only in the seam and the `*_io.dart` halves.
+- `test/no_static_final_styles_test.dart` fails on a `static final` or top-level `final` that makes a `TextStyle`, `PrefabDefinition`, `WorkspaceDefinition`, `DockDefinition`, `EditorMarker`, `SettingPref`, `Vector2` or `Vector3`, or that reads `EditorTheme`. Make it a getter.
+- `test/look/editor_dropdown_test.dart` fails on a Material `DropdownButton` or `DropdownButtonFormField` in `lib/`. Use `EditorDropdown`.
+- `test/scene/scene_starters_parity_test.dart` encodes the engine's live components through `SceneCodec` and compares them with the starter scenes in `just_game_engine_formats`. It fails when a component's saved form changes, here or in `just_game_engine`: update the starters in `just_game_engine_formats` to match.
 - `test/example_test.dart` keeps `example/example.dart` compiling, and checks that what it says the module adds is what a scope holds. README.md quotes the example, so change both together.
-- `test/kit_test.dart` holds the kit's promises: a target never under 24 px, a toolbar that never spills over its edge, a field that keeps what was typed exactly once.
-- `test/editor_scope_test.dart` and `test/module_registry_test.dart` hold the module rules above; `test/editor_keys_test.dart` presses the keys as a Mac does.
-- `test/entity_commands_test.dart`, `test/editor_history_failures_test.dart` and `test/history_mark_and_scene_read_test.dart` hold undo and the save rules; `test/scene_store_test.dart`, `test/project_files_test.dart`, `test/project_services_test.dart` and `test/package_asset_paths_test.dart` hold the file rules.
+- `test/look/kit_test.dart` holds the kit's promises: a target never under 24 px, a toolbar that never spills over its edge, a field that keeps what was typed exactly once.
+- `test/scope/editor_scope_test.dart`, `test/scope/scope_structure_test.dart` and `test/modules/module_registry_test.dart` hold the module rules above; `test/input/editor_keys_test.dart` presses the keys as a Mac does.
+- `test/history/entity_commands_test.dart`, `test/history/editor_history_failures_test.dart` and `test/history/history_mark_and_scene_read_test.dart` hold undo and the save rules; `test/scene/scene_store_test.dart`, `test/assets/project_files_test.dart`, `test/project/project_services_test.dart` and `test/assets/package_asset_paths_test.dart` hold the file rules.
 
 **Writing tests.**
 
@@ -180,7 +198,7 @@ flutter test test/editor_history_test.dart
 - `MemorySettingsStore` (`test/support/memory_settings_store.dart`), passed as `settingsStore:`, keeps preferences in memory, so a test touches neither the disk nor `path_provider`.
 - Put files in a folder from `Directory.systemTemp.createTempSync`, passed as the scope's `scenesRoot` or a `SceneStore`'s root. Never use a fixed path: `flutter test` runs test files in parallel processes. Remove the folder with `deleteWhenFree` (`test/support/real_io.dart`): on Windows a folder watcher lets go a moment after it is closed.
 - Wait for real file I/O by its outcome with `waitUntil` (`test/support/real_io.dart`), never for a fixed time; inside `testWidgets`, run it in `tester.runAsync`.
-- Keep pure geometry pure: `test/designer_geometry_test.dart` needs no `World` and no `Engine`, and the code it tests must not either.
+- Keep pure geometry pure: `test/designer/designer_geometry_test.dart` needs no `World` and no `Engine`, and the code it tests must not either.
 
 ---
 
@@ -194,14 +212,14 @@ flutter test test/editor_history_test.dart
 
 - **Analysis.** `flutter analyze` reports no issues today. Keep it that way: no errors, warnings or infos. The rules are in `analysis_options.yaml`: `flutter_lints`, with `build/` excluded.
 - **State.** Editor state is `just_signals`: a `Signal` on the service that owns it, a `Computed` for what derives from it, read in widgets through `SignalBuilder` or `SignalConsumer` (`ThrottledSignalConsumer` for a panel that follows values changing every frame of a drag), with `batch()` around the writes of one operation. Don't add a `ChangeNotifier` for editor state.
-- **The kit.** The editor's kit lives here, so a widget more than one panel or module needs belongs in it (`lib/src/look/kit/` or `lib/src/look/widgets/`), exported through `kit.dart` as well. Take colours from `EditorTheme` and sizes from `EditorMetrics`, so the theme and the accessibility settings reach them, and never make a target smaller than `EditorMetrics.minTarget`. Write font sizes as they read at 100%: `EditorLook` scales the text.
+- **The kit.** The editor's kit lives here, so a widget more than one panel or module needs belongs in it (`lib/src/look/kit/` or `lib/src/look/widgets/`), which the look's barrel exports, and `kit.dart` with it. Take colours from `EditorTheme` and sizes from `EditorMetrics`, so the theme and the accessibility settings reach them, and never make a target smaller than `EditorMetrics.minTarget`. Write font sizes as they read at 100%: `EditorLook` scales the text.
 - **Keys.** A command with a key is a `DesignerCommand` in the scope's `CommandRegistry`, bound by a `KeyBinding`, so Settings → Keyboard can change it. A widget that acts on keys itself wraps itself in `EditorKeyClaim(claims: …)` with exactly those keys; otherwise both it and the editor act.
 - **Disposal.** A `State.dispose` must not ask the `EditorScope` for anything: its container may already be closed. Hold what you need from the start.
 - **Text.** What the user sees is plain English with British spelling ("colour"), as in the rest of the editor.
 - **Documentation.** Give every public API you add a `///` doc comment: module authors read this package on pub.dev. Describe user-visible changes in [CHANGELOG.md](CHANGELOG.md). Update [README.md](README.md) when what a module author sees changes, and the editor's [ARCHITECTURE.md](https://github.com/just-unknown-dev/just-game-engine-editor/blob/main/ARCHITECTURE.md) (with a pull request there) when the module contract does.
 - **Tests.** Add or update tests for any behaviour you change. A bug fix comes with a test that fails without it.
 - **Dependencies.** Do not add a dependency without discussing it in an issue first. The editor and every module inherit it, and it must compile on every platform, web and wasm included.
-- **Structure.** Match the existing folders under `lib/src/`. Export what a module needs through `lib/just_editor_core.dart`, and what only the host needs through `lib/host.dart` alone. Modules and the editor import the libraries, never files under `lib/src/`; the package's own tests may.
+- **Structure.** Put a file in its feature's folder under `lib/src/`, at that feature's layer, named after its main class. Its folder's barrel exports it; a file kept to the package marks its declarations `@internal` instead. A new feature folder gets a barrel and a place in the layers, here and in `test/library_layout_test.dart`. What only the host needs is hidden from `lib/just_editor_core.dart` (a `hide` on the barrel's export) and reaches the host through `lib/host.dart`. Within `lib/src/`, a file imports another feature's files or barrel, never a public library. Modules and the editor import the libraries, never files under `lib/src/`; the package's own tests may.
 
 ---
 

@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
-import '../look/editor_constants.dart';
+import '../look/editor_theme.dart';
 import '../look/editor_metrics.dart';
 import 'scene_tree_model.dart';
 
@@ -31,11 +31,11 @@ enum DropZone {
 /// A few pixels, not a share of the row: dropping something *into* a
 /// container is the common move and has to be the easy one, so nearly the
 /// whole row means what it plainly looks like it means.
-const double kTreeDropEdge = 4;
+const double _treeDropEdge = 4;
 
 /// What a drop [dy] pixels down a row [height] tall means.
 DropZone dropZoneFor(double dy, double height) {
-  final edge = kTreeDropEdge < height / 3 ? kTreeDropEdge : height / 3;
+  final edge = _treeDropEdge < height / 3 ? _treeDropEdge : height / 3;
   if (dy < edge) return DropZone.above;
   if (dy > height - edge) return DropZone.below;
   return DropZone.onto;
@@ -378,7 +378,7 @@ class SceneTreeRowTile extends StatelessWidget {
   }
 
   /// The icon for something in the world; a module can say better
-  /// (`EditorScope.iconFor`).
+  /// (`ScopeModules.iconFor`).
   static IconData defaultIcon(jge.Entity entity) {
     if (entity.getComponent<jge.ChildrenComponent>()?.childIds.isNotEmpty ??
         false) {

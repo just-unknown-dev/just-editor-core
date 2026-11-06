@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../editor_constants.dart';
+import '../editor_theme.dart';
 
 /// One choice in an [EditorDropdown].
 class EditorDropdownOption<T> {

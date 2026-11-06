@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 
-import '../../model/editor_scene_state.dart';
-import '../../model/editor_commands.dart';
-import '../../model/editor_history.dart';
-import '../../model/editor_keys.dart';
+import '../../scene/editor_scene_state.dart';
+import '../../history/entity_commands.dart';
+import '../../history/editor_history.dart';
+import '../../input/editor_keys.dart';
 import 'level_tool.dart';
 
 /// Tells [PathTool] which component on an entity owns a path, and how to read
@@ -197,7 +198,10 @@ class PathTool extends LevelToolHandler {
       return;
     }
 
-    _commit(List.of(binding.read(target)), 'Move waypoint');
+    // A waypoint clicked and let go where it was is not a step: one would
+    // undo nothing, and mark the scene unsaved.
+    final points = List.of(binding.read(target));
+    if (!listEquals(points, _before)) _commit(points, 'Move waypoint');
     _reset();
   }
 
@@ -231,6 +235,9 @@ class PathTool extends LevelToolHandler {
       ComponentFieldCommand(
         label: label,
         component: target,
+        // The binding's path, which the tool knows by its own id only: a
+        // step of it never merges with an edit of another field.
+        field: 'tool:$id',
         // Found again by its entity when undone: a Stop, or a delete
         // undone, puts a fresh instance in its place.
         entity: _entity,

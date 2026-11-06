@@ -8,8 +8,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../editor_constants.dart';
-import '../kit/look.dart';
+import '../editor_theme.dart';
+import '../kit/editor_look.dart';
 
 /// One line of a menu.
 PopupMenuItem<T> editorMenuItem<T>(

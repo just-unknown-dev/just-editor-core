@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:just_signals/just_signals.dart';
 
 import '../settings/overlay_ui_settings.dart';
-import 'editor_constants.dart';
+import 'editor_theme.dart';
 import 'editor_theme_data.dart';
 
 /// The editor's current palette and the presets it can switch between.
@@ -19,9 +19,14 @@ class ThemeController {
   }
 
   /// The five built-in accents, in the order the settings dialog offers
-  /// them: id, label, colour. The first is the default.
+  /// them: id, label, colour. The first is the default
+  /// ([OverlayUiSettings.defaultThemeId], [OverlayUiSettings.defaultAccent]).
   static const List<(String, String, Color)> builtIn = [
-    ('sunrise', 'Sunrise', Color(0xFFF5746F)),
+    (
+      OverlayUiSettings.defaultThemeId,
+      'Sunrise',
+      OverlayUiSettings.defaultAccent,
+    ),
     ('mint', 'Mint', Color(0xFF5FD7A3)),
     ('cobalt', 'Cobalt', Color(0xFF5A8DFF)),
     ('amber', 'Amber', Color(0xFFFFC86B)),

@@ -12,7 +12,7 @@ abstract interface class EntityRayTest {
   /// How far along [ray] (in units of its direction) it first meets
   /// [entity]'s shape: [double.infinity] for a miss, or null when this test
   /// does not know the entity (its box then decides).
-  double? distanceTo(jge.Entity entity, jge.Ray3 ray);
+  double? distanceTo(jge.Entity entity, jge.Ray3D ray);
 }
 
 /// Knows the corners of some entities' real shape — a model's vertices, a
@@ -34,7 +34,7 @@ abstract interface class EntitySurfaceTest {
   /// of its direction) and the surface's facing in the world, towards the
   /// ray's start. Null when this test does not know the entity; an
   /// infinite [RayTriangleHit.t] for a miss.
-  RayTriangleHit? surfaceHit(jge.Entity entity, jge.Ray3 ray);
+  RayTriangleHit? surfaceHit(jge.Entity entity, jge.Ray3D ray);
 }
 
 /// A point on a surface in space and which way the surface faces there:
@@ -68,7 +68,7 @@ class RayEntityPicker implements EntityPicker {
 
   final List<EntityRayTest> Function()? _tests;
 
-  final jge.Ray3 _ray = jge.Ray3();
+  final jge.Ray3D _ray = jge.Ray3D();
   final jge.Aabb3 _box = jge.Aabb3();
 
   @override
@@ -142,7 +142,7 @@ class RayEntityPicker implements EntityPicker {
   /// an [EntitySurfaceTest] knows it (a miss of its shape passes through,
   /// as through an arch), else the face of its box, facing out. Null when
   /// it meets none.
-  SurfacePoint? placementAlong(jge.Ray3 ray, Iterable<jge.Entity> candidates) {
+  SurfacePoint? placementAlong(jge.Ray3D ray, Iterable<jge.Entity> candidates) {
     final hits = <(double, jge.Entity, jge.Aabb3)>[];
     for (final entity in candidates) {
       final box = jge.Aabb3();

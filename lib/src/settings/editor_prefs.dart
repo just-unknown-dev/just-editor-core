@@ -111,21 +111,25 @@ class EditorPrefs {
   /// read, which is older.
   bool _changedWhileLoading = false;
 
+  /// The preferences [set] while [load] was still reading: each keeps the
+  /// value it was set to, which is newer than what was read.
+  final Set<String> _setWhileLoading = {};
+
   Future<void> _loadOnce() async {
     try {
-      final loaded = await store.loadSettings();
+      final (loaded, stored) = await store.loadAll();
       if (!_changedWhileLoading) settings.value = loaded;
-      _raw.addAll(await store.readAll());
-      for (final entry in _watched.entries) {
-        if (_raw.containsKey(entry.key)) {
-          entry.value.value = _raw[entry.key];
-        }
+      for (final MapEntry(:key, :value) in stored.entries) {
+        if (_setWhileLoading.contains(key)) continue;
+        _raw[key] = value;
+        _watched[key]?.value = value;
       }
     } catch (error, stackTrace) {
       debugPrint('Failed to load editor preferences: $error');
       debugPrintStack(stackTrace: stackTrace);
     } finally {
       _loaded = true;
+      _setWhileLoading.clear();
     }
   }
 
@@ -151,9 +155,11 @@ class EditorPrefs {
     return raw == null ? pref.defaultValue : pref.decode(raw);
   }
 
-  /// Stores [value] for [pref] and tells anyone watching.
+  /// Stores [value] for [pref] and tells anyone watching. Set while [load]
+  /// is still reading, it is kept over the older value read.
   Future<void> set<T>(SettingPref<T> pref, T value) async {
     final raw = pref.encode(value);
+    if (!_loaded) _setWhileLoading.add(pref.key);
     _raw[pref.key] = raw;
     _watched[pref.key]?.value = raw;
     try {

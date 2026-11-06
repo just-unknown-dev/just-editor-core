@@ -7,6 +7,8 @@
 library;
 
 import 'package:just_storage/just_storage.dart';
+import 'package:meta/meta.dart';
 
 /// The standard browser store.
+@internal
 Future<JustStandardStorage> openEditorStorage() => JustStorage.standard();

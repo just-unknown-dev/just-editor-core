@@ -6,8 +6,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../model/editor_keys.dart';
-import '../editor_constants.dart';
+import '../../input/editor_keys.dart';
+import '../editor_theme.dart';
 import '../editor_metrics.dart';
 import 'buttons.dart';
 import 'dialogs.dart';

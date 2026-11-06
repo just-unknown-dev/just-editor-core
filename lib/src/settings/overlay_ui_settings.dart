@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'gizmo_settings.dart';
 
 /// How tightly the editor's chrome is packed: the three steps the settings
-/// dialog offers for [OverlayUiSettings.compactness].
+/// dialog offers for [OverlayUiSettings.compactness], what the dialog shows
+/// for each, and the compactness it stands for.
 enum OverlayDensity {
   /// Tighter: a compactness of 0.85.
   compact,
@@ -15,12 +16,8 @@ enum OverlayDensity {
   standard,
 
   /// Roomier: a compactness of 1.15.
-  comfortable,
-}
+  comfortable;
 
-/// What the settings dialog shows for an [OverlayDensity], and the
-/// compactness it stands for.
-extension OverlayDensityX on OverlayDensity {
   /// The step's name in the settings dialog.
   String get label => switch (this) {
     OverlayDensity.compact => 'Compact',
@@ -104,7 +101,7 @@ class OverlayUiSettings {
     required this.gridSize,
     this.boldText = false,
     this.highContrast = false,
-    this.colourBlindSafe = false,
+    this.colorBlindSafe = false,
     this.reduceMotion = false,
     this.longerTimings = false,
     this.alwaysShowFocus = false,
@@ -122,11 +119,11 @@ class OverlayUiSettings {
     this.moveStep = 0,
     this.moveStep3D = defaultMoveStep3D,
     this.smartSnap = true,
-    this.gridColour = defaultGridColour,
+    this.gridColor = defaultGridColor,
     this.gridOpacity = 1,
     this.backdrop,
     this.gizmoScale = 1,
-    this.selectionColour,
+    this.selectionColor,
     this.gizmos = GizmoSettings.defaults,
     this.pauseOnError = false,
     this.hideChromeWhilePlaying = false,
@@ -154,7 +151,7 @@ class OverlayUiSettings {
       gridSize = 32,
       boldText = false,
       highContrast = false,
-      colourBlindSafe = false,
+      colorBlindSafe = false,
       reduceMotion = false,
       longerTimings = false,
       alwaysShowFocus = false,
@@ -172,11 +169,11 @@ class OverlayUiSettings {
       moveStep = 0,
       moveStep3D = defaultMoveStep3D,
       smartSnap = true,
-      gridColour = defaultGridColour,
+      gridColor = defaultGridColor,
       gridOpacity = 1,
       backdrop = null,
       gizmoScale = 1,
-      selectionColour = null,
+      selectionColor = null,
       gizmos = GizmoSettings.defaults,
       pauseOnError = false,
       hideChromeWhilePlaying = false,
@@ -211,7 +208,7 @@ class OverlayUiSettings {
 
   /// The grid's lines out of the box: white, made faint by the grid's own
   /// strength.
-  static const Color defaultGridColour = Color(0xFFFFFFFF);
+  static const Color defaultGridColor = Color(0xFFFFFFFF);
 
   /// Undo steps kept out of the box.
   static const int defaultUndoLimit = 200;
@@ -324,7 +321,7 @@ class OverlayUiSettings {
 
   /// Error, warning and success in colours told apart by everyone — no red
   /// against green.
-  final bool colourBlindSafe;
+  final bool colorBlindSafe;
 
   /// Nothing slides, fades or eases: every change is at once.
   final bool reduceMotion;
@@ -407,7 +404,7 @@ class OverlayUiSettings {
 
   /// The colour of the grid's lines, and of a tile map's cells; the grid
   /// draws it faint, as strong as [gridOpacity] makes it.
-  final Color gridColour;
+  final Color gridColor;
 
   /// A multiple of the grid's usual faintness: 1 is the default.
   final double gridOpacity;
@@ -420,7 +417,7 @@ class OverlayUiSettings {
   final double gizmoScale;
 
   /// The outline round what is selected; null keeps each view's own.
-  final Color? selectionColour;
+  final Color? selectionColor;
 
   /// What the editor draws over the level (markers, camera frames, light
   /// and sound reach, collider and selection outlines, a kit's paths and
@@ -477,8 +474,8 @@ class OverlayUiSettings {
   }
 
   /// A copy with the given settings changed. [backdrop] and
-  /// [selectionColour] can be put back to "as built" with [clearBackdrop]
-  /// and [clearSelectionColour].
+  /// [selectionColor] can be put back to "as built" with [clearBackdrop]
+  /// and [clearSelectionColor].
   OverlayUiSettings copyWith({
     double? textScale,
     double? cornerRadius,
@@ -492,7 +489,7 @@ class OverlayUiSettings {
     double? gridSize,
     bool? boldText,
     bool? highContrast,
-    bool? colourBlindSafe,
+    bool? colorBlindSafe,
     bool? reduceMotion,
     bool? longerTimings,
     bool? alwaysShowFocus,
@@ -510,13 +507,13 @@ class OverlayUiSettings {
     double? moveStep,
     double? moveStep3D,
     bool? smartSnap,
-    Color? gridColour,
+    Color? gridColor,
     double? gridOpacity,
     Color? backdrop,
     bool clearBackdrop = false,
     double? gizmoScale,
-    Color? selectionColour,
-    bool clearSelectionColour = false,
+    Color? selectionColor,
+    bool clearSelectionColor = false,
     GizmoSettings? gizmos,
     bool? pauseOnError,
     bool? hideChromeWhilePlaying,
@@ -541,7 +538,7 @@ class OverlayUiSettings {
       gridSize: gridSize ?? this.gridSize,
       boldText: boldText ?? this.boldText,
       highContrast: highContrast ?? this.highContrast,
-      colourBlindSafe: colourBlindSafe ?? this.colourBlindSafe,
+      colorBlindSafe: colorBlindSafe ?? this.colorBlindSafe,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       longerTimings: longerTimings ?? this.longerTimings,
       alwaysShowFocus: alwaysShowFocus ?? this.alwaysShowFocus,
@@ -559,13 +556,13 @@ class OverlayUiSettings {
       moveStep: moveStep ?? this.moveStep,
       moveStep3D: moveStep3D ?? this.moveStep3D,
       smartSnap: smartSnap ?? this.smartSnap,
-      gridColour: gridColour ?? this.gridColour,
+      gridColor: gridColor ?? this.gridColor,
       gridOpacity: gridOpacity ?? this.gridOpacity,
       backdrop: clearBackdrop ? null : backdrop ?? this.backdrop,
       gizmoScale: gizmoScale ?? this.gizmoScale,
-      selectionColour: clearSelectionColour
+      selectionColor: clearSelectionColor
           ? null
-          : selectionColour ?? this.selectionColour,
+          : selectionColor ?? this.selectionColor,
       gizmos: gizmos ?? this.gizmos,
       pauseOnError: pauseOnError ?? this.pauseOnError,
       hideChromeWhilePlaying:
@@ -607,7 +604,7 @@ class OverlayUiSettings {
       other.gridSize == gridSize &&
       other.boldText == boldText &&
       other.highContrast == highContrast &&
-      other.colourBlindSafe == colourBlindSafe &&
+      other.colorBlindSafe == colorBlindSafe &&
       other.reduceMotion == reduceMotion &&
       other.longerTimings == longerTimings &&
       other.alwaysShowFocus == alwaysShowFocus &&
@@ -625,11 +622,11 @@ class OverlayUiSettings {
       other.moveStep == moveStep &&
       other.moveStep3D == moveStep3D &&
       other.smartSnap == smartSnap &&
-      other.gridColour == gridColour &&
+      other.gridColor == gridColor &&
       other.gridOpacity == gridOpacity &&
       other.backdrop == backdrop &&
       other.gizmoScale == gizmoScale &&
-      other.selectionColour == selectionColour &&
+      other.selectionColor == selectionColor &&
       other.gizmos == gizmos &&
       other.pauseOnError == pauseOnError &&
       other.hideChromeWhilePlaying == hideChromeWhilePlaying &&
@@ -656,7 +653,7 @@ class OverlayUiSettings {
     Object.hash(
       boldText,
       highContrast,
-      colourBlindSafe,
+      colorBlindSafe,
       reduceMotion,
       longerTimings,
       alwaysShowFocus,
@@ -682,11 +679,11 @@ class OverlayUiSettings {
       closePrompt,
     ),
     Object.hash(
-      gridColour,
+      gridColor,
       gridOpacity,
       backdrop,
       gizmoScale,
-      selectionColour,
+      selectionColor,
       gizmos,
     ),
     Object.hash(

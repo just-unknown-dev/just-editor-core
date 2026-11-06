@@ -7,8 +7,8 @@ import 'dart:ui' show Color;
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 import 'package:just_signals/just_signals.dart';
 
-import '../../io.dart';
-import '../services/project_files.dart';
+import '../io/io.dart';
+import '../assets/project_files.dart';
 
 /// The project's collision layers — their names, colours, descriptions and
 /// which collide — from the project's layer file
@@ -34,10 +34,12 @@ class ProjectPhysicsLayers {
   }) : _context = context ?? (() => null),
        _onProblem = onProblem;
 
-  /// The layer file of the project the editor runs in — or, for a store
-  /// rooted elsewhere (a test's temporary directory), `physics.json` there.
-  static String pathFor({String? scenesRoot}) => scenesRoot == null
-      ? '${Directory.current.path}/${jge.PhysicsLayers.defaultPath}'
+  /// The layer file of the project at [projectRoot] — the one the editor runs
+  /// in when null — or, for a store rooted elsewhere (a test's temporary
+  /// directory), `physics.json` there.
+  static String pathFor({String? scenesRoot, String? projectRoot}) =>
+      scenesRoot == null
+      ? '${projectRoot ?? Directory.current.path}/${jge.PhysicsLayers.defaultPath}'
       : '$scenesRoot/physics.json';
 
   /// Where the layer file is.

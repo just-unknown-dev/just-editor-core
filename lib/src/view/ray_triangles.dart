@@ -76,7 +76,7 @@ abstract final class RayTriangles {
   static RayTriangleHit? nearestPlaced(
     jge.ModelGeometry geometry,
     jge.Matrix4 world,
-    jge.Ray3 ray,
+    jge.Ray3D ray,
   ) {
     final inverse = jge.Matrix4.identity();
     if (inverse.copyInverse(world) == 0) return null;

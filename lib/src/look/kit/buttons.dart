@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'focus.dart';
+import 'focus_outline.dart';
 
-import '../editor_constants.dart';
+import '../editor_theme.dart';
 import '../editor_metrics.dart';
 
 /// `Label  (Ctrl+S)`: a tooltip with the key that does the same, when there
@@ -164,7 +164,7 @@ class EditorToolButton extends StatefulWidget {
 
   /// Draws the button's picture instead of [icon], in the colour and at
   /// the size the icon would have — for a sign Material has no icon for.
-  final Widget Function(Color colour, double size)? glyph;
+  final Widget Function(Color color, double size)? glyph;
 
   /// A right-click: more of what the button does — its options.
   final VoidCallback? onSecondaryTap;

@@ -7,8 +7,8 @@ import 'dart:ui' show Color;
 import 'package:just_game_engine/just_game_engine.dart' as jge;
 import 'package:just_signals/just_signals.dart';
 
-import '../../io.dart';
-import '../services/project_files.dart';
+import '../io/io.dart';
+import '../assets/project_files.dart';
 
 /// The tags a project knows, from three places:
 ///
@@ -38,10 +38,12 @@ class ProjectTags {
   }) : _spawners = spawners ?? (() => const []),
        _onProblem = onProblem;
 
-  /// The tag file of the project the editor runs in — or, for a store
-  /// rooted elsewhere (a test's temporary directory), `tags.json` there.
-  static String pathFor({String? scenesRoot}) => scenesRoot == null
-      ? '${Directory.current.path}/${jge.TagLibrary.defaultPath}'
+  /// The tag file of the project at [projectRoot] — the one the editor runs
+  /// in when null — or, for a store rooted elsewhere (a test's temporary
+  /// directory), `tags.json` there.
+  static String pathFor({String? scenesRoot, String? projectRoot}) =>
+      scenesRoot == null
+      ? '${projectRoot ?? Directory.current.path}/${jge.TagLibrary.defaultPath}'
       : '$scenesRoot/tags.json';
 
   /// Where the tag file is.
@@ -83,6 +85,18 @@ class ProjectTags {
 
   Iterable<String> Function()? _seed;
 
+  /// The tags [seedLater] found, kept for every later [load] without a
+  /// file.
+  final Set<String> _lateSeed = {};
+
+  /// Whether the list stands in for a tag file there is not ([load] found
+  /// none), and whether a change has written one since.
+  bool _standsIn = false;
+  bool _wroteSince = false;
+
+  Future<void>? _seeding;
+  bool _disposed = false;
+
   /// Sets the tags code declares — the engine's and every module's. Called
   /// on each registration pass.
   void setDeclared(Iterable<jge.TagDefinition> declared) {
@@ -104,10 +118,16 @@ class ProjectTags {
     final from = _seed = seed ?? _seed;
     final file = File(path);
     try {
+      _standsIn = false;
+      _wroteSince = false;
       if (file.existsSync()) {
         _file = jge.TagLibrary.fromJson(jsonDecode(file.readAsStringSync()));
       } else {
-        _file = jge.TagLibrary.empty.withNames(from?.call() ?? const []);
+        _file = jge.TagLibrary.empty.withNames([
+          ...?from?.call(),
+          ..._lateSeed,
+        ]);
+        _standsIn = true;
       }
     } on Object catch (e) {
       _unreadable = file.existsSync();
@@ -131,6 +151,45 @@ class ProjectTags {
 
   void _ensureLoaded() {
     if (!_loaded) load();
+  }
+
+  /// Adds the tags [names] completes with — what the project's scenes
+  /// carry, read in the background — to the list once they are read, as
+  /// [load]'s seed does: shown, not written, while there is no tag file.
+  /// Should a change write the file first, they are added to it then
+  /// ([adopt]). Nothing is added when the project had a tag file of its
+  /// own. [seeded] completes once they are in.
+  void seedLater(Future<Iterable<String>> names) {
+    _seeding = names.then(
+      _addLateSeed,
+      onError: (Object e) {
+        if (!_disposed) {
+          _onProblem?.call('Could not find the tags the scenes carry: $e');
+        }
+      },
+    );
+  }
+
+  /// Completes once the tags [seedLater] was given are in the list — at
+  /// once when it was given none.
+  Future<void> get seeded => _seeding ?? Future<void>.value();
+
+  void _addLateSeed(Iterable<String> names) {
+    if (_disposed) return;
+    final found = jge.TagNames.normalize(names).toList();
+    _lateSeed.addAll(found);
+    if (!_loaded || !_standsIn) return;
+    if (_wroteSince) {
+      adopt(found);
+      return;
+    }
+    final missing = [
+      for (final n in found)
+        if (!_file.contains(n)) n,
+    ];
+    if (missing.isEmpty) return;
+    _file = _file.withNames(missing);
+    _publish();
   }
 
   void _publish() => library.value = _file.withDeclared(_declared);
@@ -273,10 +332,14 @@ class ProjectTags {
     }
     _writeError = null;
     _file = next;
+    _wroteSince = true;
     _publish();
     return true;
   }
 
   /// Disposes [library]; the scope that made this calls it.
-  void dispose() => library.dispose();
+  void dispose() {
+    _disposed = true;
+    library.dispose();
+  }
 }

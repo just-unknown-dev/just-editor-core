@@ -5,10 +5,9 @@ import 'editor_view.dart';
 
 /// Finds what is under the pointer, seen through an [EditorView].
 ///
-/// The 2-D editor picks by each entity's box on the world plane
-/// (`PlanarEntityPicker`); a 3-D view will pick by casting the view's ray
-/// ([EditorView.screenToRay]) against bounds in space — another picker
-/// behind the same two calls.
+/// A 3-D view picks by casting the view's ray ([EditorView.screenToRay])
+/// against what is in space ([RayEntityPicker]); a picker of another kind
+/// stands behind the same two calls.
 abstract interface class EntityPicker {
   /// The topmost of [candidates] under the pixel [screen], or null.
   jge.Entity? pickAt(

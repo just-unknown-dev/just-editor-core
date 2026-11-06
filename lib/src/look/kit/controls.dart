@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../editor_constants.dart';
+import '../editor_theme.dart';
 import '../editor_metrics.dart';
 import 'fields.dart';
-import 'focus.dart';
+import 'focus_outline.dart';
 
 /// On or off: a small switch that takes the keyboard like a button.
 class EditorToggle extends StatelessWidget {
@@ -486,7 +486,7 @@ class EditorSwatches extends StatelessWidget {
     runSpacing: 6,
     alignment: WrapAlignment.end,
     children: [
-      for (final (id, label, colour) in options)
+      for (final (id, label, color) in options)
         Tooltip(
           message: label,
           child: Semantics(
@@ -509,13 +509,13 @@ class EditorSwatches extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: id == selectedId ? colour : Colors.transparent,
+                        color: id == selectedId ? color : Colors.transparent,
                         width: 2,
                       ),
                     ),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: colour,
+                        color: color,
                         shape: BoxShape.circle,
                       ),
                       child: id == selectedId

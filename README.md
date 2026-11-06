@@ -14,7 +14,7 @@ flutter pub add just_editor_core
 
 ```yaml
 dependencies:
-  just_editor_core: ^0.1.0-dev.1
+  just_editor_core: ^0.1.0
 ```
 
 A game that keeps its module beside its editor entry point needs nothing more than `just_game_engine_editor` (a dev dependency), which re-exports this library.
@@ -66,7 +66,7 @@ class CoinModule extends EditorModule {
   // The inspector's control for the coin's own field type, by its id.
   @override
   Map<String, FieldEditorBuilder> get fieldEditors => {
-    'coins.value': (field) => DropdownEditorRow(
+    'coins.value': (field) => DropdownFieldRow(
       label: field.label,
       value: '${field.value}',
       options: const ['1', '5', '10'],
@@ -83,25 +83,25 @@ Pass it to the editor in the game's editor entry point: `JustGameEditorPlugin.re
 | Area | What |
 |------|------|
 | The contract | `EditorModule` and its contributions: prefabs, tools, overlays, snap providers, docks, workspaces, toolbar buttons, settings sections, inspector sections, field editors and accessories, scene-tree actions, asset kinds and actions, markers, views, checks; tools, sections and overlays added to another's window (`workspaceContributions`, by `WorkspaceIds`) |
-| The scope | `EditorScope`: one editor's registries and services in a `just_di` container — the scene state, undo, the codec and scene store, preferences, the log, the project's tags, physics layers and colours |
+| The scope | `EditorScope`: one editor's services in a `just_di` container, each made when first asked for (`service`) — the scene state, undo, the codec and scene store, preferences, the log, the project's folder (`projectRoot`), its tags, physics layers and colors; each feature adds its own (`ScopeScene`, `ScopeHistory`, `ScopeProject`, `ScopeDesigner`, `ScopeInspector`, `ScopeAssets`), and `ScopeModules` what the modules contribute |
 | Undo | `EditorHistory`, `EditorCommand`, the entity and hierarchy commands, `ComponentEdit` |
-| Project files | `ProjectFiles` (whole-or-nothing writes, safe renames, paths kept inside the project), `PackageAssetPaths`, `AssetIndex` |
+| Project files | `ProjectFiles` (whole-or-nothing writes, safe renames, paths kept inside the project), `PackageAssetPaths`, `AssetIndex` (one per editor: `scope.assetIndex`) |
 | The inspector | `buildComponentSections`, the field rows, `FieldEditorBuilder`, `ComponentEditorExtras`, `CollectionEditor`, `AddComponentPicker` |
-| The Level Designer | `DesignerSession`, `LevelToolHandler`, `PathTool`, `DesignerOverlay`, `SnapProvider`, `SmartSnap`, `GridTopology`, `PrefabDefinition` |
-| The viewport | `EditorView`, `EntityPicker`, `RayEntityPicker`, `ViewportOverlay`, `ViewportHandles`, `EditorMarker` |
+| The Level Designer | `DesignerSession`, `LevelToolHandler`, `PathTool`, `DesignerOverlay`, `SnapProvider`, `SmartSnap`, `GridTopology` (`SquareGrid`, `HexGrid` and `HexGridModule`), `PrefabDefinition` |
+| The viewport | `EditorView`, `GameCameraEditorView` (2-D), `OrbitFlyEditorView` (3-D), `EntityPicker`, `RayEntityPicker`, `ViewportOverlay`, `ViewportHandles`, `EditorMarker` |
 | Keys | `CommandRegistry`, `DesignerCommand`, `KeyBinding`, `EditorKeys` (Cmd on macOS, Ctrl elsewhere), `EditorKeyClaim` |
-| The kit | buttons, fields, controls, dialogs, the workspace frame, `EditorDropdown`, `showEditorMenu`, `EditorScrollbar`, `ScrubbableNumberField`, the snackbar, `EditorTheme`, `EditorMetrics` |
+| The kit | buttons, fields, controls, dialogs (`showEditorConfirm`, `showEditorPrompt`), the workspace frame, `EditorDropdown`, `showEditorMenu`, `EditorScrollbar`, `ScrubbableNumberField`, the snackbar, `EditorTheme`, `EditorMetrics` |
 
 ## Libraries
 
 - `just_editor_core.dart`: what a module imports.
-- `kit.dart`: the UI kit alone (the dropdown, menus, scroll bars, number fields and the snackbar among it), for a tool that draws like the editor.
+- `kit.dart`: the UI kit alone (the dropdown, menus, scroll bars, number fields and the snackbar among it), for a tool that draws like the editor. It needs no engine.
 - `io.dart`: `dart:io`'s files, folders, platform and processes, or stand-ins with the same members on the web, which throw if called.
-- `host.dart`: everything, for the editor that hosts modules — the parts a module never calls included: `EditorScopeHost` (rebuilding the scope's registries, adding the built-ins, connecting its docks, asset reloads and split views) and `EditorLogSession` (the log's capture session).
+- `host.dart`: everything, for the editor that hosts modules — the parts a module never calls included: `ScopeHost` (rebuilding the scope's registries, adding the built-ins, connecting its docks, asset reloads and split views), `ScopeAuthoredState` (putting the world back to the scene as authored) and `EditorLogSession` (the log's capture session).
 
 ## Testing a module
 
-`EditorScope(world: World()..initialize(), modules: [CoinModule()])` gives a scope over a bare world with no editor: a module's contributions, its prefabs and its commands can be tested against it (`example/example.dart`'s `main` does this). A test that needs the editor's own tools or a running plugin — a Level Designer session, the 3-D view — takes `just_game_engine_editor` as a dev dependency and makes the scope with `builtIns: const [BuiltInEditorModule.new]`.
+`EditorScope(world: World()..initialize(), modules: [CoinModule()])` gives a scope over a bare world with no editor: a module's contributions, its prefabs and its commands can be tested against it (`example/example.dart`'s `main` does this). A test that needs the editor's own tools or a running plugin — a Level Designer session — takes `just_game_engine_editor` as a dev dependency and makes the scope with `builtIns: const [BuiltInEditorModule.new]`.
 
 ## Links
 

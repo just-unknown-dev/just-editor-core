@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../editor_constants.dart';
+import '../editor_theme.dart';
 import '../editor_metrics.dart';
 
 /// The decoration every small field in the editor shares: a dark fill, a
@@ -13,9 +13,9 @@ InputDecoration editorFieldDecoration({
   EdgeInsetsGeometry? contentPadding,
   String? suffixText,
 }) {
-  OutlineInputBorder line(Color colour) => OutlineInputBorder(
+  OutlineInputBorder line(Color color) => OutlineInputBorder(
     borderRadius: BorderRadius.circular(EditorMetrics.radiusSm + 1),
-    borderSide: BorderSide(color: colour),
+    borderSide: BorderSide(color: color),
   );
   return InputDecoration(
     isDense: true,

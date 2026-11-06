@@ -8,6 +8,7 @@
 library;
 
 import 'package:just_storage/just_storage.dart';
+import 'package:meta/meta.dart';
 
 import 'editor_storage_web.dart'
     if (dart.library.io) 'editor_storage_io.dart'
@@ -27,14 +28,17 @@ import 'editor_storage_web.dart'
 ///
 /// A scope opens it once and hands the same store to everything that keeps
 /// something in it, for the same reason.
+@internal
 Future<JustStandardStorage> openEditorStorage() => platform.openEditorStorage();
 
 /// What the keys the editor writes start with: its own settings and the
 /// built-in modules' (`editor.overlay.textScale`, `editor.store.sources`).
+@internal
 const String editorKeyPrefix = 'editor.';
 
 /// The key in the editor's own store that says the move out of the shared
 /// store is done.
+@internal
 const String movedOutKey = 'editor.storage.movedOut';
 
 /// Moves the editor's keys ([editorKeyPrefix]) out of the store it shared
@@ -46,6 +50,7 @@ const String movedOutKey = 'editor.storage.movedOut';
 /// shared copy is removed all the same. Every other key — the game's — is
 /// left as it is. A step that fails leaves the mark unset, so the whole move
 /// is tried again next time; it is safe to repeat.
+@internal
 Future<void> moveEditorKeys({
   required Future<JustStandardStorage> Function() shared,
   required JustStandardStorage own,

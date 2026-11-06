@@ -4,8 +4,8 @@ import 'package:just_game_engine/just_game_engine.dart' as jge;
 import '../settings/gizmo_settings.dart';
 
 import 'designer_canvas.dart';
-import '../model/editor_history.dart';
-import '../model/modifier_keys.dart';
+import '../history/editor_history.dart';
+import '../input/modifier_keys.dart';
 import 'level_designer_controller.dart';
 import '../view/editor_view.dart';
 

@@ -18,5 +18,4 @@
 /// its own.
 library;
 
-export 'src/io/io_native.dart'
-    if (dart.library.js_interop) 'src/io/io_web.dart';
+export 'src/io/io.dart';

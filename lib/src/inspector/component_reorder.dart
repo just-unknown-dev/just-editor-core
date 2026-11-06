@@ -8,18 +8,21 @@ library;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:just_game_engine/just_game_engine.dart' as jge;
+import 'package:meta/meta.dart';
 
-import '../look/editor_constants.dart';
+import '../look/editor_theme.dart';
 import '../look/kit/buttons.dart' show EditorIconButton;
 import '../look/widgets/editor_menu.dart';
 
 /// Whether components of [type] keep the first place and do not move:
 /// what an entity is placed by heads its list.
+@internal
 bool isPinnedComponent(Type type) => type == jge.TransformComponent;
 
 /// [order] with [type] taken out and put back just before [before] or just
 /// after [after] — at the end when neither is found. Pinned types stay
 /// first, as they were.
+@internal
 List<Type> placeComponent(
   List<Type> order,
   Type type, {
@@ -47,6 +50,7 @@ List<Type> placeComponent(
 
 /// What a drag carries: which component of which entity.
 @immutable
+@internal
 class ComponentDrag {
   const ComponentDrag({
     required this.entity,
@@ -67,6 +71,7 @@ class ComponentDrag {
 
 /// One card's place among the cards shown for its entity, and the moves
 /// it can make. [shown] is the movable cards' types, in order.
+@internal
 class ComponentPlacement {
   const ComponentPlacement({
     required this.entity,
@@ -130,6 +135,7 @@ class ComponentPlacement {
 }
 
 /// The order a set of moves leaves [entity] in, or null when nothing moves.
+@internal
 List<Type>? reorderedTypes(
   jge.Entity entity,
   Type type, {
@@ -143,6 +149,7 @@ List<Type>? reorderedTypes(
 
 /// The grip at the left of a card's header: drag it to move the card. The
 /// inspector scrolls while it is held at the panel's top or bottom edge.
+@internal
 class ComponentDragGrip extends StatefulWidget {
   const ComponentDragGrip({super.key, required this.placement});
 
@@ -243,6 +250,7 @@ class _Ghost extends StatelessWidget {
 /// A card a dragged one can be dropped on: above it in its top half, below
 /// it in its bottom half, a line showing which. A pinned card takes a drop
 /// only below it — nothing goes above it.
+@internal
 class ComponentDropZone extends StatefulWidget {
   const ComponentDropZone({
     super.key,
@@ -316,6 +324,7 @@ class _ComponentDropZoneState extends State<ComponentDropZone> {
 
 /// The ⋮ on a card's header: the moves, for the keyboard and for a place
 /// further than a drag comfortably reaches.
+@internal
 class ComponentPlaceMenu extends StatelessWidget {
   const ComponentPlaceMenu({super.key, required this.placement});
 

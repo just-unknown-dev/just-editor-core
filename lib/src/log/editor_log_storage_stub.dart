@@ -1,0 +1,23 @@
+import 'package:meta/meta.dart';
+
+import 'editor_log_entry.dart';
+import 'editor_log_storage.dart';
+
+class _StubEditorLogStorage implements EditorLogStorage {
+  @override
+  String? get filePath => null;
+
+  @override
+  Future<void> appendEntry(EditorLogEntry entry) async {}
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<List<EditorLogEntry>> loadEntries() async => const <EditorLogEntry>[];
+}
+
+/// The storage behind [createEditorLogStorage] without `dart:io` (the
+/// web): it keeps nothing and has no file.
+@internal
+EditorLogStorage createEditorLogStorageImpl() => _StubEditorLogStorage();

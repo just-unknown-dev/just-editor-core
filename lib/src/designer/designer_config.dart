@@ -2,8 +2,9 @@
 /// brush sizes `[` and `]` step through, how many camera bookmark slots the
 /// digit keys address.
 ///
-/// One per scope; pass a different one to `EditorScope(config: ...)` for a
-/// game whose tiles are 24 units or whose brushes go to 9.
+/// One per scope (`ScopeDesigner.config`); register a different one in the
+/// scope's container before it is first read, for a game whose tiles are 24
+/// units or whose brushes go to 9.
 class DesignerConfig {
   /// [bookmarkSlots] must be from 0 to 9: there are nine digit keys.
   const DesignerConfig({

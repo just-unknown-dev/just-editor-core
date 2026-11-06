@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../look/editor_constants.dart';
+import '../look/editor_theme.dart';
 import '../look/kit/fields.dart';
-import 'field_rows.dart' show parseTypedNumber;
-import 'field_style.dart';
+import 'rows/parse_typed_number.dart';
+import '../look/inspector_field.dart';
 
 /// Edits a list or a map field as rows, not as JSON.
 ///

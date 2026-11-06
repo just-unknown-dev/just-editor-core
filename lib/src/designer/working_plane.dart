@@ -58,7 +58,7 @@ final class WorkingPlane {
 
   /// Where [ray] crosses it, ahead of the ray's origin; null when the ray
   /// runs along it or away from it.
-  jge.Vector3? intersect(jge.Ray3 ray) {
+  jge.Vector3? intersect(jge.Ray3D ray) {
     final o = along(ray.origin, axis);
     final d = along(ray.direction, axis);
     if (d.abs() < 1e-9) return null;

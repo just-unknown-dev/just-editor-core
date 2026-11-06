@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_signals/just_signals.dart';
 
-import 'editor_constants.dart';
+import 'editor_theme.dart';
 import 'editor_metrics.dart';
 import 'kit/buttons.dart';
 import '../settings/overlay_ui_settings.dart';
@@ -24,11 +24,8 @@ enum EditorSnackBarType {
   warning,
 
   /// Something that went wrong. Always shows.
-  error,
-}
+  error;
 
-/// The look of an [EditorSnackBarType].
-extension EditorSnackBarTypeX on EditorSnackBarType {
   /// The colour of the card's edge, icon and bar, from the palette in force.
   Color get accentColor => switch (this) {
     EditorSnackBarType.info => EditorTheme.info,

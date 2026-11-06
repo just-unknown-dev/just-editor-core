@@ -50,7 +50,7 @@ abstract interface class EditorView {
 
   /// The ray from the viewer through the pixel [screen] — what picking and
   /// gizmos in 3-D intersect with.
-  jge.Ray3 screenToRay(Offset screen, [jge.Ray3? out]);
+  jge.Ray3D screenToRay(Offset screen, [jge.Ray3D? out]);
 
   /// Where the 3-D point [world] is on screen, or null when it is behind
   /// the viewer.
@@ -141,7 +141,7 @@ class GameCameraEditorView implements EditorView {
   Offset worldToScreen(Offset world) => camera.worldToScreen(world);
 
   @override
-  jge.Ray3 screenToRay(Offset screen, [jge.Ray3? out]) =>
+  jge.Ray3D screenToRay(Offset screen, [jge.Ray3D? out]) =>
       camera.screenToWorldRay(screen, out);
 
   final jge.Vector3 _p = jge.Vector3.zero();
